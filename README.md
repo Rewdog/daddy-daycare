@@ -2,7 +2,7 @@
 
 A token economy and gamification system for kids — built to run all summer.
 
-Parents approve every submission. Kids earn Summer Tokens and spend them on rewards. Everything syncs across devices via Cloudflare KV with zero setup friction — no accounts, no email, just role buttons and passwords.
+Parents approve every submission. Kids earn Summer Tokens and spend them on rewards. Everything syncs across devices via Cloudflare KV — no accounts, no email, just role buttons and passwords each family member sets on first launch.
 
 **Built by Rocky and Griffin Capobianco, summer 2026.**
 
@@ -51,7 +51,6 @@ This app is built for parents who want a structured, tech-powered reward system 
 | Fork a GitHub repo | Beginner |
 | Run terminal commands | Intermediate |
 | Edit a JSON config file | Intermediate |
-| Set Cloudflare secrets | Intermediate |
 | Connect GitHub to Cloudflare auto-deploy | Intermediate |
 
 ### The recommended path: use an AI coding agent
@@ -66,14 +65,13 @@ You don't need to know how to do any of this yourself. If you install [Claude Co
 **What the agent does:**
 - Forks the repo, clones it, fills in all config files
 - Creates the Cloudflare KV namespaces
-- Sets passwords as secrets
 - Writes your schedule config
 - Pushes to GitHub and connects Cloudflare auto-deploy
 - Tests the app end-to-end before declaring it done
 
 To try this: install Claude Code, open a terminal in any directory, and say:
 
-> "Set up the Daddy Daycare app for my family. Here's our info: [your family names, passwords, summer schedule]. Follow the setup guide at [your fork URL]."
+> "Set up the Daddy Daycare app for my family. Here's our info: [your family names, summer schedule]. Follow the setup guide at [your fork URL]."
 
 The AI agent checklist at the bottom of this README is written specifically for agents to follow.
 
@@ -99,7 +97,7 @@ If you prefer to do it yourself, follow the step-by-step setup below. Budget abo
 
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier works)
 - [Node.js](https://nodejs.org) 18+ and [Bun](https://bun.sh) installed
-- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/): `npm install -g wrangler`
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/): `bunx wrangler` (no global install needed with Bun)
 - A GitHub account (for auto-deploy)
 
 ### Step 1 — Fork the repo privately
@@ -117,63 +115,57 @@ bun install
 ### Step 3 — Authenticate with Cloudflare
 
 ```bash
-wrangler login
+bunx wrangler login
 ```
 
 ### Step 4 — Create KV namespaces
 
+You need two separate KV namespaces — one for production, one for dev/staging:
+
 ```bash
 # Production
-wrangler kv namespace create DAYCARE_KV
+bunx wrangler kv namespace create DAYCARE_KV
+
 # Dev/staging
-wrangler kv namespace create DAYCARE_KV --preview
+bunx wrangler kv namespace create DAYCARE_KV_DEV
 ```
 
-Copy the `id` values from each command's output. You'll need them in the next step.
+Each command prints an `id`. Copy both — you'll need them in the next step.
 
 ### Step 5 — Configure wrangler.jsonc
 
-Open `wrangler.jsonc` and fill in:
+Open `wrangler.jsonc` and fill in your family's details. The file has two sections: the root config (production) and the `env.dev` block (staging). Update both:
 
 ```jsonc
 {
-  "kv_namespaces": [
-    {
-      "binding": "DAYCARE_KV",
-      "id": "YOUR_PRODUCTION_KV_ID_HERE",        // from step 4
-      "preview_id": "YOUR_DEV_KV_ID_HERE"         // from step 4 --preview
-    }
-  ],
   "vars": {
-    "APP_NAME": "Your App Name",                  // shown in the header
-    "PARENT_ROLES": "[\"Mom\",\"Dad\"]",           // JSON array of parent names
-    "KID_ROLES": "[\"Alice\",\"Bob\"]",            // JSON array of kid names
-    "ALLOWED_IP": ""                               // optional: lock to your home IP
+    "APP_NAME": "Your App Name",
+    "PARENT_ROLES": "[\"Mom\",\"Dad\"]",
+    "KID_ROLES": "[\"Alice\",\"Bob\"]",
+    "ALLOWED_IP": ""                     // optional: your home IP to restrict access
+  },
+  "kv_namespaces": [
+    { "binding": "DAYCARE_KV", "id": "YOUR_PRODUCTION_KV_ID" }
+  ],
+  "env": {
+    "dev": {
+      "vars": {
+        "APP_NAME": "Your App Name",
+        "PARENT_ROLES": "[\"Mom\",\"Dad\"]",
+        "KID_ROLES": "[\"Alice\",\"Bob\"]",
+        "ALLOWED_IP": ""
+      },
+      "kv_namespaces": [
+        { "binding": "DAYCARE_KV", "id": "YOUR_DEV_KV_ID" }
+      ]
+    }
   }
 }
 ```
 
-Repeat the `vars` block inside `[env.dev]` for your staging environment (same values are fine to start).
+Role names (Mom, Dad, Alice, Bob) become the character buttons on the login screen. **Use the same names in both the production and dev blocks.**
 
-### Step 6 — Set passwords
-
-Passwords live in Cloudflare Worker secrets (not in the repo):
-
-```bash
-# Production — run once per role
-wrangler secret put PASSWORD_MOM
-wrangler secret put PASSWORD_DAD
-wrangler secret put PASSWORD_ALICE
-wrangler secret put PASSWORD_BOB
-
-# Dev/staging — same commands with --env dev
-wrangler secret put PASSWORD_MOM --env dev
-# ... etc
-```
-
-Password secret names follow the pattern `PASSWORD_ROLENAME` where `ROLENAME` is the uppercased role with spaces replaced by underscores (e.g. "Child 1" → `PASSWORD_CHILD_1`).
-
-### Step 7 — Customize your schedule
+### Step 6 — Customize your schedule
 
 Copy the example config and customize it:
 
@@ -197,26 +189,51 @@ git commit -m "add family schedule config"
 git push origin main
 ```
 
+### Step 7 — Customize chores and rewards (optional)
+
+Default chores and rewards are defined in `worker.js` under `DEFAULT_CHORES` and `DEFAULT_REWARDS`. Edit these to match your family's point economy, then push to `dev` to test before merging to `main`.
+
 ### Step 8 — Connect Cloudflare to GitHub
 
 1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → Workers & Pages
 2. Create a new Worker → connect to GitHub → select your fork
-3. Set branch to `main`, build command blank, deploy command: `wrangler deploy`
-4. Repeat for a `dev` Worker pointed at your `dev` branch (add `--env dev` to the deploy command)
+3. Set branch to `main`, build command blank, deploy command: `bunx wrangler deploy`
+4. Repeat for a `dev` Worker pointed at your `dev` branch with deploy command: `bunx wrangler deploy --env dev`
 
-After connecting, every push to `main` auto-deploys production. Every push to `dev` auto-deploys your staging environment.
+After connecting, every push to `main` auto-deploys production. Every push to `dev` auto-deploys staging.
 
-### Step 9 — Customize chores and rewards (optional)
-
-Default chores and rewards are defined in `worker.js` under `DEFAULT_CHORES` and `DEFAULT_REWARDS`. Edit these to match your family's point economy, then push to `dev` to test before merging to `main`.
-
-### Step 10 — Test it
+### Step 9 — Run tests
 
 ```bash
-bun test        # 33 tests must pass before any push
+bun test        # all 33 must pass
 ```
 
-Open your staging URL, log in as a parent, and make sure approvals work. Then log in as a kid and submit a chore.
+### Step 10 — Deploy and set passwords
+
+Push to `dev` and open your staging URL:
+
+```bash
+git push origin dev
+```
+
+**Passwords are set by each family member on first use** — there's nothing to configure in advance:
+
+1. Open the app in a browser
+2. Click your character (Mom, Dad, Alice, etc.)
+3. The app will prompt you to create a password — this only happens once
+4. After that, your password is stored (PBKDF2-hashed) in KV and used for all future logins
+
+Repeat for each family member. Parents should set up their accounts before handing the app to kids.
+
+### Step 11 — Test it
+
+Log in as a parent, make sure approvals work. Then log in as a kid and submit a chore. When everything looks good, merge to `main`:
+
+```bash
+git checkout main
+git merge dev
+git push origin main
+```
 
 ---
 
@@ -238,17 +255,16 @@ Never push directly to `main` — that deploys immediately to the live app your 
 If you're an AI agent (Claude Code, OpenCode, Copilot) setting this up for a family, follow these steps in order. Each step has a concrete verification.
 
 1. **Fork and clone** — `git clone` the private fork, confirm you're on the `main` branch
-2. **wrangler login** — run it, confirm `wrangler whoami` returns the correct account
-3. **Create KV namespaces** — run both `wrangler kv namespace create` commands, capture the IDs
-4. **Fill wrangler.jsonc** — insert KV IDs and family vars (APP_NAME, PARENT_ROLES, KID_ROLES)
-5. **Set secrets** — one `wrangler secret put` per role for both prod and `--env dev`
-6. **Customize schedule.config.js** — ask the family for their summer plan, fill in all sections, commit the file
-7. **Customize DEFAULT_CHORES / DEFAULT_REWARDS** in worker.js to match the family's point economy
-8. **Run `bun test`** — all 33 must pass; fix any failures before proceeding
-9. **Push to dev** — `git push origin dev`
-10. **Connect Cloudflare Pages** to the GitHub fork (prod → `main`, staging → `dev`)
-11. **Verify staging** — open the staging URL, log in as parent and kid, submit a test chore and approve it
-12. **Merge dev → main** — only after staging verification passes
+2. **wrangler login** — run `bunx wrangler login`, confirm `bunx wrangler whoami` returns the correct account
+3. **Create KV namespaces** — run `bunx wrangler kv namespace create DAYCARE_KV` (production) and `bunx wrangler kv namespace create DAYCARE_KV_DEV` (dev), capture both IDs
+4. **Fill wrangler.jsonc** — insert KV IDs and family vars (APP_NAME, PARENT_ROLES, KID_ROLES) in both the root block and the `env.dev` block
+5. **Customize schedule.config.js** — ask the family for their summer plan, fill in all sections, commit the file
+6. **Customize DEFAULT_CHORES / DEFAULT_REWARDS** in worker.js to match the family's point economy
+7. **Run `bun test`** — all 33 must pass; fix any failures before proceeding
+8. **Push to dev** — `git push origin dev`
+9. **Connect Cloudflare Workers** to the GitHub fork (prod → `main` with `bunx wrangler deploy`, staging → `dev` with `bunx wrangler deploy --env dev`)
+10. **Verify staging** — open the staging URL; each family member clicks their character and sets a password on first launch; confirm parent approval flow works end-to-end
+11. **Merge dev → main** — only after staging verification passes
 
 ---
 
@@ -258,7 +274,7 @@ If you're an AI agent (Claude Code, OpenCode, Copilot) setting this up for a fam
 bunx wrangler dev
 ```
 
-Opens at `http://localhost:8787`. Local dev uses the `preview_id` KV namespace.
+Opens at `http://localhost:8787`. Local dev uses the dev KV namespace.
 
 ---
 
