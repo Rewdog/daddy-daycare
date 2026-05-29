@@ -250,6 +250,45 @@ Never push directly to `main` — that deploys immediately to the live app your 
 
 ---
 
+## Staying up to date
+
+When bug fixes or new features are published to this repo, you can pull them into your private fork without touching your family config.
+
+### One-time setup — add the upstream remote
+
+```bash
+git remote add upstream https://github.com/YOUR_PUBLIC_REPO_URL.git
+```
+
+### Pulling an update
+
+```bash
+# Make sure you're on dev
+git checkout dev
+
+# Fetch latest from the public repo
+git fetch upstream
+
+# Merge it in
+git merge upstream/main
+```
+
+**What might need attention after a merge:**
+
+- **`wrangler.jsonc`** — if it has a merge conflict, keep your KV IDs and role names; accept any other changes from upstream.
+- **`worker.js` / `app.js`** — pure code, no family data. Accept upstream changes.
+- **`schedule.config.js`** — never touched by upstream (it's in `.gitignore`). Your schedule is safe.
+
+After merging, run tests and deploy to dev to verify before merging to main:
+
+```bash
+bun test
+git push origin dev
+# verify at your staging URL, then merge to main
+```
+
+---
+
 ## For AI Agents — Setup Checklist
 
 If you're an AI agent (Claude Code, OpenCode, Copilot) setting this up for a family, follow these steps in order. Each step has a concrete verification.
