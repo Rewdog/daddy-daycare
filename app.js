@@ -947,7 +947,7 @@ function initDashboardShell(shell) {
       <div id="db-toast-slot"></div>
       <div class="dashboard-topbar">
         <div>
-          <div class="dashboard-kicker">🍦 Daddy Daycare</div>
+          <div class="dashboard-kicker">🍦 ${escapeHtml(familyConfig.appName)}</div>
           <h1>${escapeHtml(context.dateStr)}${context.week ? ` · ${escapeHtml(context.week.emoji)} ${escapeHtml(context.week.label)}` : ""}</h1>
         </div>
         <div class="dashboard-topbar-actions">
