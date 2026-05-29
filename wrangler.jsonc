@@ -1,0 +1,55 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "daycare",
+  "main": "worker.js",
+  "compatibility_date": "2026-05-24",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "."
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  // --- Family configuration ---
+  // APP_NAME:     Displayed in the browser tab and app header.
+  // PARENT_ROLES: JSON array of roles that can approve submissions (e.g. ["Dad","Mom"]).
+  // KID_ROLES:    JSON array of roles that earn tokens (e.g. ["Child 1","Child 2"]).
+  // ALLOWED_IP:   Your home IP — only this IP can access the app. Leave blank ("") to allow all.
+  "vars": {
+    "APP_NAME": "Daddy Daycare",
+    "PARENT_ROLES": "[\"Dad\",\"Mom\"]",
+    "KID_ROLES": "[\"Child1\",\"Child2\"]",
+    // Set to your home IP to restrict access. Leave blank to allow all.
+    "ALLOWED_IP": ""
+  },
+  "kv_namespaces": [
+    {
+      // Run: bunx wrangler kv namespace create DAYCARE_KV
+      // Then paste the generated id here.
+      "binding": "DAYCARE_KV",
+      "id": "YOUR_KV_NAMESPACE_ID"
+    }
+  ],
+  "env": {
+    "dev": {
+      "name": "daycare-dev",
+      "vars": {
+        "APP_NAME": "Daddy Daycare",
+        "PARENT_ROLES": "[\"Dad\",\"Mom\"]",
+        "KID_ROLES": "[\"Child1\",\"Child2\"]",
+        // Set to your home IP to restrict access. Leave blank to allow all.
+        "ALLOWED_IP": ""
+      },
+      "kv_namespaces": [
+        {
+          // Run: bunx wrangler kv namespace create DAYCARE_KV --preview
+          // Then paste the generated id here.
+          "binding": "DAYCARE_KV",
+          "id": "YOUR_DEV_KV_NAMESPACE_ID"
+        }
+      ]
+    }
+  }
+}

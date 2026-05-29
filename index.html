@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Daddy Daycare</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- LOGIN SCREEN -->
+  <div id="login-screen">
+    <h1>🍦 <span class="app-name">Daddy Daycare</span></h1>
+    <p id="login-subtitle">Click your character first.</p>
+    <label id="password-label" for="login-password">Password</label>
+    <input id="login-password" type="password" placeholder="Enter password" autocomplete="current-password" />
+    <p id="login-error" style="display:none"></p>
+    <div id="role-buttons"></div>
+    <button id="auth-submit" onclick="handleAuthSubmit()" disabled>Continue</button>
+    <button id="dashboard-login-btn" type="button" onclick="enterLoginDashboard()">📺 TV Dashboard</button>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="app" style="display:none">
+    <header>
+      <div class="header-identity">
+        <div id="header-avatar" class="avatar-badge avatar-large">👨</div>
+        <div>
+          <h1>🍦 <span class="app-name">Daddy Daycare</span></h1>
+          <span id="logged-in-as"></span>
+        </div>
+      </div>
+      <div id="wallet">
+        <span>☀️</span>
+        <span id="token-count">0</span> Summer Tokens
+      </div>
+      <button id="logout-btn" onclick="logout()">Sign Out</button>
+    </header>
+
+    <section id="avatar-panel">
+      <h2>📸 Avatar</h2>
+      <div class="avatar-editor">
+        <div id="avatar-preview" class="avatar-badge avatar-xl">👨</div>
+        <div class="avatar-editor-copy">
+          <p id="avatar-help">Upload a photo or image file to use as your avatar.</p>
+          <label class="file-upload-btn" for="avatar-file">Choose Photo</label>
+          <input id="avatar-file" type="file" accept="image/*" />
+          <button id="clear-avatar-btn" type="button" class="secondary-btn" onclick="clearAvatar()">Remove Photo</button>
+        </div>
+      </div>
+    </section>
+
+    <button id="schedule-toggle" onclick="toggleSchedule()">📅 Today's Schedule</button>
+    <section id="schedule-panel" style="display:none">
+      <div id="schedule-content"></div>
+    </section>
+
+    <!-- KID VIEW -->
+    <main id="kid-view" style="display:none">
+      <button id="chores-toggle" onclick="toggleChores()">Chores</button>
+      <section id="chores-panel" style="display:none">
+        <h2>Chores</h2>
+        <div id="chore-list"><p>No chores configured yet.</p></div>
+        <div class="ad-hoc-chore-panel">
+          <button type="button" class="secondary-btn" onclick="showAdHocChoreModal()">Ask for points on another chore</button>
+          <div id="ad-hoc-chore-status"><p>No ad-hoc chore requests waiting right now.</p></div>
+        </div>
+      </section>
+
+      <section id="streaks-panel">
+        <h2>🔥 Daily Streaks</h2>
+        <div id="streak-list">
+          <div class="streak-item" data-streak-id="helping">
+            <div>
+              <strong>🤝 Helping Streak</strong>
+              <small>Build toward a 5-day helping streak.</small>
+            </div>
+            <button onclick="submitStreak('helping')">Log Today</button>
+          </div>
+          <div class="streak-item" data-streak-id="kindness">
+            <div>
+              <strong>💛 Kindness Streak</strong>
+              <small>Build toward a 7-day kindness streak.</small>
+            </div>
+            <button onclick="submitStreak('kindness')">Log Today</button>
+          </div>
+          <div class="streak-item" data-streak-id="workout">
+            <div>
+              <strong>💪 Workout Streak</strong>
+              <small>Keep your workout streak moving every day.</small>
+            </div>
+            <button data-streak-log-btn onclick="submitStreak('workout')">Log Today</button>
+          </div>
+          <div class="streak-item" data-streak-id="pup-entertainer">
+            <div>
+              <strong>🐶 Pup Entertainer Streak</strong>
+              <small>Keep Hazel and Twitter entertained. On vacation, request a vacation keep-alive from Mom or Dad.</small>
+            </div>
+            <div>
+              <button data-streak-log-btn onclick="submitStreak('pup-entertainer')">Log Today</button>
+              <button data-vacation-hold-btn class="secondary-btn" onclick="requestVacationStreakHold('pup-entertainer')">🏖️ Vacation Keep-Alive</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>📈 Streak Board</h2>
+        <div id="kid-streak-board"><p>No streak progress yet.</p></div>
+      </section>
+
+      <button id="rewards-toggle" onclick="toggleRewards()">Cash Out</button>
+      <section id="rewards-panel" style="display:none">
+        <h2>Cash Out Rewards</h2>
+        <div class="reward-item">
+          <span>🎮 10$ Worth Robux</span>
+          <button onclick="redeemReward('robux-10')">250 ☀️</button>
+        </div>
+        <div class="reward-item">
+          <span>🥤🍬 Drink or Candy from QT</span>
+          <button onclick="redeemReward('qt-drink-candy')">250 ☀️</button>
+        </div>
+        <div class="reward-item">
+          <span>🥤🍬 Candy and Drink from QT</span>
+          <button onclick="redeemReward('qt-combo')">500 ☀️</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- PARENT VIEW -->
+    <main id="parent-view" style="display:none">
+      <section class="parent-dashboard-controls">
+        <div>
+          <h2>📺 TV Dashboard</h2>
+          <p>Turn on a big-screen view for the family TV during the day.</p>
+        </div>
+        <button id="dashboard-toggle" type="button" class="secondary-btn" onclick="toggleDashboardMode()">Enable TV Dashboard</button>
+      </section>
+      <section class="parent-affirmation-section">
+        <h2>💛 Affirmations</h2>
+        <p>Send a kind message to a family member.</p>
+        <button type="button" onclick="showAffirmationModal()">Write an Affirmation</button>
+      </section>
+      <section>
+        <h2>📋 Pending Approvals</h2>
+        <div id="pending-list"><p>No pending approvals.</p></div>
+      </section>
+      <section>
+        <h2>👦 Kids' Balances</h2>
+        <div id="kids-balances-list"></div>
+      </section>
+      <section>
+        <h2>🏦 Token Bank</h2>
+        <div id="token-bank-controls" class="parent-token-controls"></div>
+      </section>
+      <section>
+        <h2>🔔 Spend Notifications</h2>
+        <div id="spend-notification-list"><p>No spend notifications yet.</p></div>
+      </section>
+      <section>
+        <h2>🔥 Streak Board</h2>
+        <div id="parent-streak-board"><p>No streak progress yet.</p></div>
+      </section>
+      <section>
+        <h2>🛠️ Chore Admin</h2>
+        <div id="parent-chore-admin"><p>Loading chores...</p></div>
+        <div class="admin-actions">
+          <button type="button" class="secondary-btn" onclick="addChoreDraft()">Add Chore</button>
+          <button type="button" onclick="saveChores()">Save Chores</button>
+        </div>
+      </section>
+    </main>
+
+    <section id="dashboard-mode" style="display:none">
+      <div id="dashboard-shell"></div>
+    </section>
+
+    <div id="message"></div>
+  </div>
+  <script src="schedule.config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

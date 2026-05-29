@@ -1,0 +1,10 @@
+# Family-specific configuration — never commit this
+schedule.config.js
+family.config.js
+.dev.vars
+
+# Wrangler local dev
+.wrangler/
+
+# Node
+node_modules/

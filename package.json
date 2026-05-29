@@ -1,0 +1,6 @@
+{
+  "name": "daycare",
+  "scripts": {
+    "test": "bun test"
+  }
+}
