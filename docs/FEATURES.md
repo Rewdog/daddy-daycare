@@ -42,7 +42,7 @@ All data lives in Cloudflare KV and syncs across every device in real time. No a
 
 Roles are split into two categories:
 
-- **Parent roles** — get the Dad view with approval controls, token bank, and chore/reward admin. Configured via `PARENT_ROLES` in `wrangler.jsonc`.
+- **Parent roles** — get the parent view with approval controls, token bank, and chore/reward admin. Configured via `PARENT_ROLES` in `wrangler.jsonc`.
 - **Kid roles** — get the kid view with chore submissions, streaks, and the rewards shop. Configured via `KID_ROLES` in `wrangler.jsonc`.
 
 Default parent roles: `Dad`, `Mom`
@@ -70,7 +70,7 @@ Set `ALLOWED_IP` in `wrangler.jsonc` to your home IP address to lock the app so 
 
 | Source | How |
 |--------|-----|
-| Chores | Submitting a chore and getting dad's approval awards the chore's token value |
+| Chores | Submitting a chore and getting parent approval awards the chore's token value |
 | Affirmations | First 3 affirmations a kid writes per day earn 3 ☀️ each (9 max per day) |
 
 Tokens never expire. They carry over forever until spent.
@@ -82,7 +82,7 @@ Kids can only lose tokens by spending them in the rewards shop, or if a parent m
 ### Balances
 
 - Kids see their balance in the header at all times.
-- Parents see all kids' balances in the **Kids' Balances** section of the dad view.
+- Parents see all kids' balances in the **Kids' Balances** section of the parent view.
 - The TV dashboard shows a live scoreboard with both kids' token counts.
 
 ---
@@ -142,7 +142,7 @@ Default chores (14 total):
 | 🧽 Clean the House | 50 |
 | 🗑️ Take Out the Trash | 10 |
 
-> To change defaults permanently (before first deploy), edit `DEFAULT_CHORES` in `worker.js`. After first deploy, use the dad admin panel — KV overrides the hardcoded defaults.
+> To change defaults permanently (before first deploy), edit `DEFAULT_CHORES` in `worker.js`. After first deploy, use the parent admin panel — KV overrides the hardcoded defaults.
 
 ---
 
@@ -198,7 +198,7 @@ For streaks with `vacationHold: true`, kids see a **🏖️ Vacation Keep-Alive*
 
 ### Streak board
 
-Both the kid view and dad view show a **Streak Board** with every kid's current and best count for every streak. The TV dashboard has a full **Streak Watch** panel with fire emoji bars showing progress toward the goal.
+Both the kid view and parent view show a **Streak Board** with every kid's current and best count for every streak. The TV dashboard has a full **Streak Watch** panel with fire emoji bars showing progress toward the goal.
 
 ---
 
@@ -225,11 +225,11 @@ Kids spend tokens on rewards from the **Cash Out** panel.
 | 🌙 Stay Up 30 Min Later | 45 ☀️ |
 | 💛 30 Min Alone With a Parent | 45 ☀️ |
 
-> Edit default rewards in `worker.js` → `DEFAULT_REWARDS` before first deploy. After deploy, use the dad admin panel.
+> Edit default rewards in `worker.js` → `DEFAULT_REWARDS` before first deploy. After deploy, use the parent admin panel.
 
 ### Rewards admin
 
-The dad view includes a rewards editor for inline editing. Changes persist in KV.
+The parent view includes a rewards editor for inline editing. Changes persist in KV.
 
 ---
 
@@ -360,7 +360,12 @@ Done/In Progress/Not Done counts are shown in the TV dashboard's schedule metric
 
 ## TV Dashboard
 
-The TV dashboard is a full-screen display designed for a living room screen. Parents enable it from the dad view with **"Enable TV Dashboard"**.
+The TV dashboard is a full-screen display designed for a living room screen. It can be launched two ways:
+
+- **From the login screen** — tap **📺 TV Dashboard** before logging in. No session required; uses the public `/api/dashboard` endpoint (IP-restricted).
+- **From the parent view** — tap **"Enable TV Dashboard"** after logging in as a parent.
+
+In both cases the dashboard is read-only — no approvals, no edits, no token adjustments are possible from this view.
 
 ### Panels
 
@@ -443,7 +448,7 @@ Parents can manually add or remove tokens from any kid's balance.
 
 ### How to use
 
-1. Find **🏦 Token Bank** in the dad view.
+1. Find **🏦 Token Bank** in the parent view.
 2. Enter an amount in the input field (default: 10).
 3. Tap **Deposit** to add tokens or **Take Out** to remove them.
 
@@ -455,7 +460,7 @@ This is useful for manual bonuses ("You helped a stranger — here's 25 tokens")
 
 ## Spend Notifications
 
-The **🔔 Spend Notifications** panel in the dad view logs every reward purchase. Shows:
+The **🔔 Spend Notifications** panel in the parent view logs every reward purchase. Shows:
 - Which kid redeemed it
 - Which reward
 - How many tokens it cost
@@ -478,7 +483,7 @@ The last 50 transactions are kept. There's no undo — spending is immediate and
 }
 ```
 
-Changes to `vars` require a redeploy. Passwords are set separately as Worker secrets (see README setup guide).
+Changes to `vars` require a redeploy. Passwords are set by each family member on first launch — click your character, enter a password, and the app saves it (PBKDF2-hashed) in KV. No wrangler commands needed.
 
 ### schedule.config.js — all schedule and streak configuration
 
