@@ -34,6 +34,44 @@ Parents approve every submission. Kids earn Summer Tokens and spend them on rewa
 
 ---
 
+## Screenshots
+
+**Login — pick your character, set your password on first launch**
+
+<img src="docs/screenshots/login.png" width="300" alt="Login screen">
+
+---
+
+**Kid view — submit chores, log streaks, cash out rewards**
+
+| Chores | Streaks & Rewards |
+|:------:|:-----------------:|
+| <img src="docs/screenshots/kidview1.png" width="280" alt="Kid chores view"> | <img src="docs/screenshots/kidview2.png" width="280" alt="Kid streaks and rewards"> |
+
+---
+
+**Parent view — approve submissions, manage balances, configure chores and rewards**
+
+| Dashboard | Streak & Chore Admin | Rewards Admin |
+|:---------:|:--------------------:|:-------------:|
+| <img src="docs/screenshots/parentview1.png" width="240" alt="Parent dashboard"> | <img src="docs/screenshots/parentview2.png" width="240" alt="Streak board and chore admin"> | <img src="docs/screenshots/parentview3.png" width="240" alt="Rewards admin"> |
+
+---
+
+**Daily schedule — kids see the plan, parents mark each block done, in-progress, or missed**
+
+| Kid view (read-only) | Parent view (with status controls) |
+|:--------------------:|:----------------------------------:|
+| <img src="docs/screenshots/kidschedule.png" width="300" alt="Kid schedule"> | <img src="docs/screenshots/parentschedule.png" width="300" alt="Parent schedule"> |
+
+---
+
+**TV Dashboard** — living room scoreboard with token totals, streak watch, upcoming schedule, and live alerts
+
+<img src="docs/screenshots/tv-dashboard.png" width="700" alt="TV Dashboard">
+
+---
+
 ## Getting Started
 
 ### Who is this for?
