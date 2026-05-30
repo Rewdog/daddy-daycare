@@ -38,7 +38,7 @@ Parents approve every submission. Kids earn Summer Tokens and spend them on rewa
 
 **Login — pick your character, set your password on first launch**
 
-![Login screen](docs/screenshots/login.png)
+<img src="docs/screenshots/login.png" width="300" alt="Login screen">
 
 ---
 
@@ -46,7 +46,7 @@ Parents approve every submission. Kids earn Summer Tokens and spend them on rewa
 
 | Chores | Streaks & Rewards |
 |:------:|:-----------------:|
-| ![Kid chores view](docs/screenshots/kidview1.png) | ![Kid streaks and rewards](docs/screenshots/kidview2.png) |
+| <img src="docs/screenshots/kidview1.png" width="280" alt="Kid chores view"> | <img src="docs/screenshots/kidview2.png" width="280" alt="Kid streaks and rewards"> |
 
 ---
 
@@ -54,7 +54,7 @@ Parents approve every submission. Kids earn Summer Tokens and spend them on rewa
 
 | Dashboard | Streak & Chore Admin | Rewards Admin |
 |:---------:|:--------------------:|:-------------:|
-| ![Parent dashboard](docs/screenshots/parentview1.png) | ![Streak board and chore admin](docs/screenshots/parentview2.png) | ![Rewards admin](docs/screenshots/parentview3.png) |
+| <img src="docs/screenshots/parentview1.png" width="240" alt="Parent dashboard"> | <img src="docs/screenshots/parentview2.png" width="240" alt="Streak board and chore admin"> | <img src="docs/screenshots/parentview3.png" width="240" alt="Rewards admin"> |
 
 ---
 
@@ -62,13 +62,13 @@ Parents approve every submission. Kids earn Summer Tokens and spend them on rewa
 
 | Kid view (read-only) | Parent view (with status controls) |
 |:--------------------:|:----------------------------------:|
-| ![Kid schedule](docs/screenshots/kidschedule.png) | ![Parent schedule](docs/screenshots/parentschedule.png) |
+| <img src="docs/screenshots/kidschedule.png" width="300" alt="Kid schedule"> | <img src="docs/screenshots/parentschedule.png" width="300" alt="Parent schedule"> |
 
 ---
 
 **TV Dashboard** — living room scoreboard with token totals, streak watch, upcoming schedule, and live alerts
 
-![TV Dashboard](docs/screenshots/tv-dashboard.png)
+<img src="docs/screenshots/tv-dashboard.png" width="700" alt="TV Dashboard">
 
 ---
 
