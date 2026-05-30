@@ -1408,7 +1408,7 @@ function showAffirmationModal() {
       <p class="affirmation-modal-hint">Say something kind. First 3 each day earn 3 tokens.</p>
       <select id="affirmation-to" class="affirmation-modal-select">
         <option value="">— Who is this for? —</option>
-        ${familyConfig.allRoles.filter(r => r !== currentUser).map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("")}
+        ${familyConfig.allRoles.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("")}
       </select>
       <textarea id="affirmation-text" class="affirmation-modal-textarea" placeholder="I really appreciated when you…" rows="4" maxlength="400"></textarea>
       <div class="affirmation-modal-actions">
