@@ -660,10 +660,12 @@ function streakFlyAcross(user) {
   if (streakCometGuard) return;
   streakCometGuard = setTimeout(() => streakCometGuard = null, 1600);
 
-  const avatarEl = document.querySelector(`.db-streak-${user.toLowerCase()} .db-avatar`);
-  if (!avatarEl) return;
+  const card = document.querySelector(`.db-streak-${user.toLowerCase()}`);
+  if (!card) return;
+  const avatarEl = card.querySelector(".db-avatar");
+  const originEl = (avatarEl && avatarEl.getBoundingClientRect().width > 0) ? avatarEl : card;
 
-  const rect = avatarEl.getBoundingClientRect();
+  const rect = originEl.getBoundingClientRect();
   const startX = rect.left + rect.width / 2;
   const startY = rect.top + rect.height / 2;
   const flyX = window.innerWidth - startX + 120;
@@ -974,7 +976,7 @@ function initDashboardShell(shell) {
           <div class="dashboard-kicker">☀️ Token Scores</div>
           <div class="db-scoreboard">
             ${familyConfig.kidRoles.map((kid, i) => `
-              <div class="db-scoreboard-card db-score-kid-${i}" onclick="celebrateUser('${escapeHtml(kid)}')">
+              <div class="db-scoreboard-card db-score-kid-${i} db-score-${kid.toLowerCase()}" onclick="celebrateUser('${escapeHtml(kid)}')">
                 ${buildDashboardAvatarHtml(kid)}
                 <span class="db-scoreboard-name">${escapeHtml(kid)}</span>
                 <span class="db-scoreboard-num" id="db-score-kid-${i}">${getTokens(kid)}</span>
