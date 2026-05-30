@@ -97,7 +97,8 @@ export default {
       try {
         return await routeApi(request, env, url);
       } catch (err) {
-        return jsonResponse({ error: "internal_error", detail: String(err && err.message || err) }, 500);
+        console.error("API error:", err);
+        return jsonResponse({ error: "internal_error" }, 500);
       }
     }
 
