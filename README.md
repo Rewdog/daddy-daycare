@@ -257,7 +257,7 @@ When bug fixes or new features are published to this repo, you can pull them int
 ### One-time setup — add the upstream remote
 
 ```bash
-git remote add upstream https://github.com/YOUR_PUBLIC_REPO_URL.git
+git remote add upstream https://github.com/Rewdog/daddy-daycare.git
 ```
 
 ### Pulling an update
