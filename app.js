@@ -114,6 +114,10 @@ function getDailyBlocks(date = new Date()) {
     if (t >= rangeStart && t <= rangeEnd) return cfg.transitionRange.blocks || [];
   }
 
+  // Day-of-week block override (e.g. weekend-specific schedules)
+  const dow = date.getDay();
+  if (cfg.dayBlocks && cfg.dayBlocks[dow]) return cfg.dayBlocks[dow];
+
   return cfg.dailyBlocks || [];
 }
 
