@@ -1335,7 +1335,7 @@ let tickerIndex = 0;
 let tickerPrevCount = 0;
 
 function calcTickerDuration(textLength) {
-  return Math.min(15000, Math.max(4000, textLength * 40));
+  return Math.min(20000, Math.max(8000, textLength * 60));
 }
 
 function buildAffirmationTickerMarkup() {
