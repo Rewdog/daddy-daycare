@@ -34,6 +34,44 @@ Parents approve every submission. Kids earn Summer Tokens and spend them on rewa
 
 ---
 
+## Screenshots
+
+**Login — pick your character, set your password on first launch**
+
+![Login screen](docs/screenshots/login.png)
+
+---
+
+**Kid view — submit chores, log streaks, cash out rewards**
+
+| Chores | Streaks & Rewards |
+|:------:|:-----------------:|
+| ![Kid chores view](docs/screenshots/kidview1.png) | ![Kid streaks and rewards](docs/screenshots/kidview2.png) |
+
+---
+
+**Parent view — approve submissions, manage balances, configure chores and rewards**
+
+| Dashboard | Streak & Chore Admin | Rewards Admin |
+|:---------:|:--------------------:|:-------------:|
+| ![Parent dashboard](docs/screenshots/parentview1.png) | ![Streak board and chore admin](docs/screenshots/parentview2.png) | ![Rewards admin](docs/screenshots/parentview3.png) |
+
+---
+
+**Daily schedule — kids see the plan, parents mark each block done, in-progress, or missed**
+
+| Kid view (read-only) | Parent view (with status controls) |
+|:--------------------:|:----------------------------------:|
+| ![Kid schedule](docs/screenshots/kidschedule.png) | ![Parent schedule](docs/screenshots/parentschedule.png) |
+
+---
+
+**TV Dashboard** — living room scoreboard with token totals, streak watch, upcoming schedule, and live alerts
+
+![TV Dashboard](docs/screenshots/tv-dashboard.png)
+
+---
+
 ## Getting Started
 
 ### Who is this for?
