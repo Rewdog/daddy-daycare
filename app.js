@@ -2897,7 +2897,7 @@ function renderParentView() {
     document.getElementById("parent-view").appendChild(eggAdminSection);
   }
   renderEggAdminSection(eggAdminSection);
-  renderEggOverlay();
+  if (isDashboardModeEnabled()) renderEggOverlay();
 }
 
 async function adjustTokens(user, direction) {
