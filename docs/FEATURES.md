@@ -14,8 +14,9 @@ Complete guide to everything Daddy Daycare does and how to configure it.
 6. [Rewards shop](#rewards-shop)
 7. [Affirmations](#affirmations)
 8. [Daily schedule](#daily-schedule)
-9. [TV dashboard](#tv-dashboard)
-10. [Avatars](#avatars)
+9. [Easter Egg Challenges](#easter-egg-challenges)
+10. [TV dashboard](#tv-dashboard)
+11. [Avatars](#avatars)
 11. [Token bank](#token-bank)
 12. [Spend notifications](#spend-notifications)
 13. [Configuration reference](#configuration-reference)
@@ -455,6 +456,68 @@ Parents can manually add or remove tokens from any kid's balance.
 Takes effect immediately and shows in the kid's header balance on next refresh. Balance never goes below zero.
 
 This is useful for manual bonuses ("You helped a stranger — here's 25 tokens") or consequences ("That was unkind — losing 50 tokens").
+
+---
+
+## Easter Egg Challenges
+
+Hidden eggs float randomly on screen. Kids who spot and click one get a timed challenge — the faster they finish, the bigger the token multiplier.
+
+---
+
+### How it works
+
+1. **An egg appears** — a small, low-opacity 🥚 floats somewhere on the page. Easy to miss if you're not looking. Up to 3 eggs can be active at once.
+2. **Kid clicks it** — a modal pops up showing the challenge title, base token reward, and time limit. A countdown shows how long before the egg disappears.
+3. **Kid accepts** — enters their password to claim it. The challenge is now locked to that kid with the clock running.
+4. **Kid completes it** — hits "I Did It!" when done. Goes to the parent's Pending Approvals queue.
+5. **Parent approves** — sees the challenge, time used, computed multiplier, and final token amount. One tap to award.
+
+### Token multiplier
+
+The multiplier is based on what fraction of the time limit the kid used:
+
+| Time used | Multiplier |
+|-----------|-----------|
+| ≤ 25% | 2.0x |
+| ≤ 50% | 1.6x |
+| ≤ 75% | 1.4x |
+| ≤ 100% | 1.2x |
+| Over time | 1.0x (base, no penalty) |
+
+**Chore check:** If the kid hasn't had any chores approved today when the parent reviews, the multiplier is capped at 1.2x regardless of speed. Completing chores on the same day as an egg challenge unlocks the full multiplier range.
+
+### Egg behavior
+
+- Eggs appear on a variable schedule (30–90 minute randomized gaps) to keep kids checking the app frequently.
+- Each egg has a **15-minute display window**. If not claimed before the window closes, it vanishes.
+- A **60-second grace window** applies after the display window ends — a kid who finds the egg and starts typing their password won't lose it mid-entry.
+- The same challenge can appear to both kids simultaneously. Each kid must claim and complete it independently.
+
+### Challenge pool
+
+Challenges come from a pool of approved ideas. Anyone can submit — kids or parents. Parent submissions auto-approve; kid submissions go through a one-tap approval queue in the parent view.
+
+Each challenge has:
+- **Title** — what to do (e.g., "Clean the garage")
+- **Description** — optional context
+- **Base tokens** — the reward before the multiplier
+- **Time limit** — how many minutes the kid has once they accept
+
+### TV Dashboard
+
+Eggs appear on the TV Dashboard too. Clicking one shows a kid selector first (since no specific kid is logged in on the TV), then a password entry for the chosen kid.
+
+### Parent controls
+
+The **Challenge Admin** section in the parent view shows:
+- Pool size and status (warns when low)
+- Pending approval count and completion review count
+- Last egg activation time
+- **Activate Egg Now** — manually push an egg without waiting for the schedule
+- **Enable / Disable Eggs** — kill switch to pause the system
+- **Add a Challenge Idea** form — submit and auto-approve a new challenge
+- Pending kid ideas to approve or reject
 
 ---
 

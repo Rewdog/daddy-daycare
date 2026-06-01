@@ -176,6 +176,37 @@
 
     <div id="message"></div>
   </div>
+  <!-- EGG DISCOVERY MODAL -->
+  <div id="egg-discovery-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.55);display:none;align-items:center;justify-content:center">
+    <div style="background:linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%);border:2px solid #f59e0b;border-radius:16px;padding:1.5rem;max-width:360px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+      <div style="font-size:2rem;font-weight:800;color:#92400e;margin-bottom:0.5rem">🥚 You Found One!</div>
+      <h3 id="egg-modal-title" style="font-size:1.2rem;font-weight:700;color:#1c1917;margin:0.5rem 0"></h3>
+      <p id="egg-modal-desc" style="color:#57534e;font-size:0.9rem;margin:0.25rem 0 0.75rem"></p>
+      <div style="font-size:1.1rem;font-weight:700;color:#d97706;margin:0.5rem 0">
+        <span id="egg-modal-tokens"></span> ☀️ tokens &middot; <span id="egg-modal-timelimit"></span>
+      </div>
+      <div id="egg-modal-countdown" style="font-size:0.8rem;color:#9ca3af;margin-bottom:1rem"></div>
+      <div id="egg-modal-kidselect" style="display:none;margin-bottom:0.75rem">
+        <p style="font-weight:600;color:#374151;margin:0 0 0.5rem">Who's accepting this?</p>
+        <div id="egg-kid-buttons" style="display:flex;gap:0.5rem;justify-content:center"></div>
+      </div>
+      <div id="egg-modal-pwfield">
+        <p id="egg-modal-kidlabel" style="font-weight:600;color:#374151;margin:0 0 0.25rem;font-size:0.9rem"></p>
+        <input type="password" id="egg-modal-pw" placeholder="Enter password" autocomplete="off"
+          style="width:100%;padding:0.5rem;border:1px solid #d1d5db;border-radius:6px;font-size:1rem;margin:0.25rem 0;box-sizing:border-box">
+        <div id="egg-modal-error" style="display:none;color:#dc2626;font-size:0.85rem;margin:0.25rem 0"></div>
+        <button id="egg-modal-accept-btn" onclick="submitEggAccept()"
+          style="width:100%;margin-top:0.5rem;background:#f59e0b;color:white;border:none;border-radius:8px;padding:0.6rem;font-size:1rem;font-weight:600;cursor:pointer">
+          Accept Challenge
+        </button>
+      </div>
+      <button onclick="closeEggModal()"
+        style="width:100%;margin-top:0.5rem;background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:0.6rem;font-size:0.9rem;cursor:pointer">
+        Not Now
+      </button>
+    </div>
+  </div>
+
   <script src="schedule.config.js"></script>
   <script src="app.js"></script>
 </body>

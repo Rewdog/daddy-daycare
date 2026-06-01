@@ -381,3 +381,483 @@ describe("worker.fetch — streak vacation keep-alive", () => {
     expect(streaks.Child1["pup-entertainer"].lastApprovedDay).toBe("2026-07-20");
   });
 });
+
+// ---- Easter Egg Challenge tests ----
+
+// Generic env for new tests — no family-specific role names in committed code.
+function makeGenericEnv(kvStore = {}) {
+  const store = new Map(Object.entries(kvStore));
+  return {
+    DAYCARE_KV: {
+      get: async (key) => (store.has(key) ? store.get(key) : null),
+      put: async (key, value) => { store.set(key, value); },
+      delete: async (key) => { store.delete(key); },
+    },
+    ASSETS: { fetch: async () => new Response("asset", { status: 200 }) },
+    APP_NAME: "Test Daycare",
+    PARENT_ROLES: '["Parent1","Parent2"]',
+    KID_ROLES: '["Child1","Child2"]',
+    ALLOWED_IP: TEST_IP,
+    __store: store,
+  };
+}
+
+function withGenericKidSession(role, env) {
+  const token = crypto.randomUUID();
+  env.__store.set(`session:${token}`, JSON.stringify({ role, expires: Date.now() + 86_400_000 }));
+  return token;
+}
+
+function withGenericParentSession(role, env) {
+  const token = crypto.randomUUID();
+  env.__store.set(`session:${token}`, JSON.stringify({ role, expires: Date.now() + 86_400_000 }));
+  return token;
+}
+
+function todayKeyUtc() {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+async function setupKidAuth(role, password, env) {
+  await call(
+    "/api/auth/setup",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role, password }) },
+    env,
+  );
+}
+
+describe("Easter Egg Challenges — submit idea", () => {
+  let env, kidToken;
+
+  beforeEach(() => {
+    env = makeGenericEnv();
+    kidToken = withGenericKidSession("Child1", env);
+  });
+
+  it("kid can submit a challenge idea (goes to pending, approved:false)", async () => {
+    const res = await call(
+      "/api/egg-challenges/submit",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${kidToken}` },
+        body: JSON.stringify({ title: "Clean the garage", description: "It needs it", token_reward: 40, time_limit_minutes: 120 }),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(typeof body.id).toBe("string");
+
+    const challenges = JSON.parse(env.__store.get("egg_challenges"));
+    expect(challenges).toHaveLength(1);
+    expect(challenges[0].approved).toBe(false);
+    expect(challenges[0].title).toBe("Clean the garage");
+    expect(challenges[0].created_by).toBe("Child1");
+  });
+
+  it("parent-submitted idea is auto-approved", async () => {
+    const parentToken = withGenericParentSession("Parent1", env);
+    const res = await call(
+      "/api/egg-challenges/submit",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${parentToken}` },
+        body: JSON.stringify({ title: "Tidy the backyard", token_reward: 50, time_limit_minutes: 60 }),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const challenges = JSON.parse(env.__store.get("egg_challenges"));
+    expect(challenges[0].approved).toBe(true);
+  });
+
+  it("rejects submission missing title", async () => {
+    const res = await call(
+      "/api/egg-challenges/submit",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${kidToken}` },
+        body: JSON.stringify({ token_reward: 40, time_limit_minutes: 60 }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("title_required");
+  });
+
+  it("rejects submission with token_reward of 0", async () => {
+    const res = await call(
+      "/api/egg-challenges/submit",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${kidToken}` },
+        body: JSON.stringify({ title: "Do something", token_reward: 0, time_limit_minutes: 60 }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("invalid_token_reward");
+  });
+
+  it("rejects submission with time_limit_minutes below 5", async () => {
+    const res = await call(
+      "/api/egg-challenges/submit",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${kidToken}` },
+        body: JSON.stringify({ title: "Too quick", token_reward: 10, time_limit_minutes: 3 }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("invalid_time_limit");
+  });
+});
+
+describe("Easter Egg Challenges — approve and reject", () => {
+  let env, parentToken;
+
+  beforeEach(() => {
+    env = makeGenericEnv({
+      egg_challenges: JSON.stringify([
+        { id: "c1", title: "Clean the garage", approved: false, token_reward: 40, time_limit_minutes: 120, repeatable: true, created_by: "Child1", created_at: Date.now() },
+      ]),
+    });
+    parentToken = withGenericParentSession("Parent1", env);
+  });
+
+  it("parent can approve a pending challenge", async () => {
+    const res = await call(
+      "/api/egg-challenges/approve",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${parentToken}` },
+        body: JSON.stringify({ id: "c1" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const challenges = JSON.parse(env.__store.get("egg_challenges"));
+    expect(challenges[0].approved).toBe(true);
+  });
+
+  it("kid cannot approve a challenge", async () => {
+    const kidToken = withGenericKidSession("Child1", env);
+    const res = await call(
+      "/api/egg-challenges/approve",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${kidToken}` },
+        body: JSON.stringify({ id: "c1" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("parent can reject a challenge idea (removes it)", async () => {
+    const res = await call(
+      "/api/egg-challenges/reject",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${parentToken}` },
+        body: JSON.stringify({ id: "c1" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const challenges = JSON.parse(env.__store.get("egg_challenges"));
+    expect(challenges).toHaveLength(0);
+  });
+});
+
+describe("Easter Egg Challenges — activate and toggle", () => {
+  let env, parentToken;
+
+  beforeEach(() => {
+    env = makeGenericEnv({
+      egg_challenges: JSON.stringify([
+        { id: "c1", title: "Clean the garage", approved: true, token_reward: 40, time_limit_minutes: 120, repeatable: true, created_by: "Parent1", created_at: Date.now() },
+      ]),
+    });
+    parentToken = withGenericParentSession("Parent1", env);
+  });
+
+  it("parent can activate an egg (creates active_eggs entry)", async () => {
+    const res = await call(
+      "/api/eggs/activate",
+      { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${parentToken}` }, body: "{}" },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const eggs = JSON.parse(env.__store.get("active_eggs") || "[]");
+    expect(eggs).toHaveLength(1);
+    expect(eggs[0].challenge_id).toBe("c1");
+    expect(typeof eggs[0].display_end).toBe("number");
+  });
+
+  it("activate returns 400 when no approved challenges exist", async () => {
+    env = makeGenericEnv({ egg_challenges: JSON.stringify([]) });
+    parentToken = withGenericParentSession("Parent1", env);
+    const res = await call(
+      "/api/eggs/activate",
+      { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${parentToken}` }, body: "{}" },
+      env,
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("no_approved_challenges");
+  });
+
+  it("kid cannot activate an egg", async () => {
+    const kidToken = withGenericKidSession("Child1", env);
+    const res = await call(
+      "/api/eggs/activate",
+      { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${kidToken}` }, body: "{}" },
+      env,
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("parent can disable and re-enable eggs via toggle", async () => {
+    const disable = await call(
+      "/api/eggs/toggle",
+      { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${parentToken}` }, body: JSON.stringify({ enabled: false }) },
+      env,
+    );
+    expect(disable.status).toBe(200);
+    const schedule = JSON.parse(env.__store.get("egg_schedule") || "{}");
+    expect(schedule.enabled).toBe(false);
+
+    await call(
+      "/api/eggs/toggle",
+      { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${parentToken}` }, body: JSON.stringify({ enabled: true }) },
+      env,
+    );
+    const scheduleAfter = JSON.parse(env.__store.get("egg_schedule") || "{}");
+    expect(scheduleAfter.enabled).toBe(true);
+  });
+});
+
+describe("Easter Egg Challenges — accept", () => {
+  let env, password;
+
+  beforeEach(async () => {
+    env = makeGenericEnv({
+      // active_eggs use challenge_id to reference the challenge pool entry.
+      // The accept endpoint finds eggs by e.challenge_id === request.challenge_id.
+      active_eggs: JSON.stringify([
+        { id: "e1", challenge_id: "c1", challenge_title: "Clean the garage", challenge_description: "", token_reward: 40, time_limit_minutes: 120, display_end: Date.now() + 900_000, expires_at: Date.now() + 960_000 },
+      ]),
+    });
+    password = "test-secret";
+    await setupKidAuth("Child1", password, env);
+  });
+
+  it("kid can accept an active egg with correct password", async () => {
+    const kidToken = withGenericKidSession("Child1", env);
+    const res = await call(
+      "/api/eggs/accept",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${kidToken}` },
+        body: JSON.stringify({ challenge_id: "c1", kid_role: "Child1", password }),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+
+    const accepts = JSON.parse(env.__store.get("egg_accepts") || "[]");
+    expect(accepts).toHaveLength(1);
+    expect(accepts[0].kid_role).toBe("Child1");
+    expect(accepts[0].challenge_id).toBe("c1");
+  });
+
+  it("returns 401 when wrong password supplied", async () => {
+    const kidToken = withGenericKidSession("Child1", env);
+    const res = await call(
+      "/api/eggs/accept",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${kidToken}` },
+        body: JSON.stringify({ challenge_id: "c1", kid_role: "Child1", password: "wrong-password" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(401);
+    expect((await res.json()).error).toBe("wrong_password");
+  });
+
+  it("returns 409 if same kid tries to accept same egg twice", async () => {
+    const kidToken = withGenericKidSession("Child1", env);
+    const payload = { challenge_id: "c1", kid_role: "Child1", password };
+    const opts = { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${kidToken}` }, body: JSON.stringify(payload) };
+    await call("/api/eggs/accept", opts, env);
+    const second = await call("/api/eggs/accept", { ...opts, body: JSON.stringify(payload) }, env);
+    expect(second.status).toBe(409);
+    expect((await second.json()).error).toBe("already_accepted");
+  });
+
+  it("returns 404 when challenge_id does not exist in active_eggs", async () => {
+    const kidToken = withGenericKidSession("Child1", env);
+    const res = await call(
+      "/api/eggs/accept",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${kidToken}` },
+        body: JSON.stringify({ challenge_id: "no-such-challenge", kid_role: "Child1", password }),
+      },
+      env,
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("Easter Egg Challenges — complete and verify", () => {
+  let env, parentToken, acceptId;
+
+  beforeEach(() => {
+    acceptId = "a1";
+    // Include a chore + today's approved entry so the chore cap doesn't apply (tests full multiplier).
+    const choreId = "chore-test";
+    const today = todayKeyUtc();
+    env = makeGenericEnv({
+      egg_accepts: JSON.stringify([
+        {
+          id: acceptId,
+          egg_id: "e1",
+          challenge_id: "c1",
+          challenge_title: "Clean the garage",
+          kid_role: "Child1",
+          accepted_at: Date.now() - 1_800_000, // 30 min ago → 25% of 120 min → 2.0x
+          expires_at: Date.now() + 60_000,
+          time_limit_minutes: 120,
+          token_reward: 40,
+          completed_at: null,
+          status: "active",
+        },
+      ]),
+      chores: JSON.stringify([{ id: choreId, label: "Test chore", amount: 10 }]),
+      approved: JSON.stringify([`Child1:${choreId}:${today}`]),
+      "tokens:Child1": "10",
+    });
+    parentToken = withGenericParentSession("Parent1", env);
+  });
+
+  it("kid can mark a challenge complete (moves to pending)", async () => {
+    const kidToken = withGenericKidSession("Child1", env);
+    const res = await call(
+      "/api/egg-challenges/complete",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${kidToken}` },
+        body: JSON.stringify({ accept_id: acceptId }),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const accepts = JSON.parse(env.__store.get("egg_accepts"));
+    const a = accepts.find(x => x.id === acceptId);
+    expect(typeof a.completed_at).toBe("number");
+
+    const pending = JSON.parse(env.__store.get("pending") || "[]");
+    expect(pending.some(p => p.accept_id === acceptId && p.type === "egg_challenge")).toBe(true);
+  });
+
+  it("parent can verify/award tokens with speed multiplier applied", async () => {
+    const kidToken = withGenericKidSession("Child1", env);
+    await call(
+      "/api/egg-challenges/complete",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${kidToken}` },
+        body: JSON.stringify({ accept_id: acceptId }),
+      },
+      env,
+    );
+
+    // Kid used 30 min of 120 min limit = 25% → 2.0x multiplier → 80 tokens
+    const res = await call(
+      "/api/egg-challenges/verify",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${parentToken}` },
+        body: JSON.stringify({ accept_id: acceptId, action: "approve" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.tokens_awarded).toBe(80); // 40 base × 2.0x
+    expect(Number(env.__store.get("tokens:Child1"))).toBe(90); // 10 existing + 80
+  });
+
+  it("parent can deny a completion (removes from pending, no tokens awarded)", async () => {
+    const kidToken = withGenericKidSession("Child1", env);
+    await call(
+      "/api/egg-challenges/complete",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${kidToken}` },
+        body: JSON.stringify({ accept_id: acceptId }),
+      },
+      env,
+    );
+
+    const res = await call(
+      "/api/egg-challenges/verify",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${parentToken}` },
+        body: JSON.stringify({ accept_id: acceptId, action: "deny" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(Number(env.__store.get("tokens:Child1"))).toBe(10); // unchanged
+    const pending = JSON.parse(env.__store.get("pending") || "[]");
+    expect(pending.some(p => p.accept_id === acceptId)).toBe(false);
+  });
+
+  it("chore cap: multiplier capped at 1.2x when no chores approved today", async () => {
+    // 10 min of 120 min used → normally 2.0x, but no chores → capped at 1.2x → 48 tokens
+    const env2 = makeGenericEnv({
+      egg_accepts: JSON.stringify([
+        {
+          id: "a2",
+          egg_id: "e1",
+          challenge_id: "c1",
+          challenge_title: "Clean the garage",
+          kid_role: "Child1",
+          accepted_at: Date.now() - 600_000, // 10 min ago
+          expires_at: Date.now() + 60_000,
+          time_limit_minutes: 120,
+          token_reward: 40,
+          completed_at: Date.now() - 60_000,
+          status: "active",
+        },
+      ]),
+      pending: JSON.stringify([
+        { accept_id: "a2", type: "egg_challenge", kid_role: "Child1", challenge_title: "Clean the garage", time_limit_minutes: 120, token_reward: 40 },
+      ]),
+      "tokens:Child1": "0",
+    });
+    const parent2 = withGenericParentSession("Parent1", env2);
+
+    const res = await call(
+      "/api/egg-challenges/verify",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${parent2}` },
+        body: JSON.stringify({ accept_id: "a2", action: "approve" }),
+      },
+      env2,
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).tokens_awarded).toBe(48); // 40 * 1.2x chore cap
+  });
+});
