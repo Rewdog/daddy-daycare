@@ -245,19 +245,28 @@ async function handleAuthLogin(request, env) {
 // ---------- Session-gated handlers ----------
 
 async function handleGetDashboard(request, env) {
-  const [streaks, affirmations, scheduleStatuses, pending, avatars, chores] = await Promise.all([
+  const now = Date.now();
+  const [streaks, affirmations, scheduleStatuses, pending, avatars, chores, rawEggs] = await Promise.all([
     readJsonKey(env, "streaks", {}),
     readJsonKey(env, "affirmations", []),
     readScheduleStatuses(env),
     readJsonKey(env, "pending", []),
     readJsonKey(env, "avatars", {}),
     readChores(env),
+    readJsonKey(env, "active_eggs", []),
   ]);
   const tokenEntries = await Promise.all(
     [...KID_ROLES].map(async r => [r, await readNumber(env, tokensKey(r))])
   );
   const tokens = Object.fromEntries(tokenEntries);
-  const twentyFourHoursAgo = Date.now() - 86400000;
+  const twentyFourHoursAgo = now - 86400000;
+
+  // Expire stale eggs (same logic as handleGetState, write-back if changed)
+  const activeEggs = rawEggs.filter(e => e.display_end >= now);
+  if (activeEggs.length !== rawEggs.length) {
+    await env.DAYCARE_KV.put("active_eggs", JSON.stringify(activeEggs));
+  }
+
   return jsonResponse({
     tokens,
     streaks,
@@ -266,6 +275,7 @@ async function handleGetDashboard(request, env) {
     pendingCount: pending.length,
     avatars: sanitizeAvatars(avatars),
     chores,
+    active_eggs: activeEggs,
   });
 }
 

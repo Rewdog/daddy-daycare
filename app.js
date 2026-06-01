@@ -37,6 +37,7 @@ let draggedChoreId = null;
 let dashboardClockTimer = null;
 let dashboardRefreshTimer = null;
 let dashboardRefreshInFlight = false;
+let eggTimerIntervals = [];
 let dashboardAudioContext = null;
 let dashboardAlerts = [];
 let dashboardAlertId = 0;
@@ -767,7 +768,7 @@ function syncDashboardClock() {
     dashboardClockTimer = null;
   }
 
-  if (isParentUser() && isDashboardModeEnabled()) {
+  if (isDashboardModeEnabled()) {
     dashboardClockTimer = setInterval(() => {
       renderDashboardMode();
     }, 30000);
@@ -780,7 +781,7 @@ function syncDashboardRefresh() {
     dashboardRefreshTimer = null;
   }
 
-  if (isParentUser() && isDashboardModeEnabled()) {
+  if (isDashboardModeEnabled()) {
     dashboardRefreshTimer = setInterval(() => {
       refreshDashboardData();
     }, 60000);
@@ -788,7 +789,7 @@ function syncDashboardRefresh() {
 }
 
 async function refreshDashboardData() {
-  if (dashboardRefreshInFlight || !isParentUser() || !isDashboardModeEnabled()) {
+  if (dashboardRefreshInFlight || !isDashboardModeEnabled()) {
     return;
   }
 
@@ -2896,7 +2897,7 @@ function renderParentView() {
     document.getElementById("parent-view").appendChild(eggAdminSection);
   }
   renderEggAdminSection(eggAdminSection);
-  renderEggOverlay();
+  if (isDashboardModeEnabled()) renderEggOverlay();
 }
 
 async function adjustTokens(user, direction) {
@@ -3267,7 +3268,9 @@ function renderEggChallengesSection(container) {
 
   container.innerHTML = html;
 
-  // Live timers
+  // Live timers — clear previous batch before creating new ones
+  eggTimerIntervals.forEach(iv => clearInterval(iv));
+  eggTimerIntervals = [];
   active.forEach(a => {
     const el = document.getElementById("egg-timer-" + a.id);
     if (!el) return;
@@ -3276,6 +3279,7 @@ function renderEggChallengesSection(container) {
       if (rem <= 0) { clearInterval(iv); el.textContent = "⏱ 0:00 (grace)"; return; }
       el.textContent = "⏱ " + fmtTime(rem);
     }, 1000);
+    eggTimerIntervals.push(iv);
   });
 }
 
