@@ -3387,11 +3387,11 @@ function renderEggAdminSection(container) {
     html += "<p class='egg-section-header'>Challenge Pool</p>";
     approved.forEach(c => {
       html += `<div class="egg-pending-idea">
-        <div>
+        <div style="flex:1;min-width:0">
           <strong>${escapeHtml(c.title)}</strong>
           <div class="egg-idea-meta">${escapeHtml(c.description || "")} &middot; ${c.token_reward} ☀️ &middot; ${c.time_limit_minutes} min</div>
         </div>
-        <button onclick="rejectEggChallenge('${c.id}')" style="background:#ef4444;color:white;border:none;border-radius:4px;padding:0.3rem 0.6rem;cursor:pointer;font-size:0.8rem;flex-shrink:0">✗</button>
+        <button onclick="rejectEggChallenge('${c.id}')" style="background:#ef4444;color:white;border:none;border-radius:4px;padding:0.3rem 0.6rem;cursor:pointer;font-size:0.8rem;flex-shrink:0;align-self:center">✗</button>
       </div>`;
     });
   }
