@@ -135,6 +135,16 @@ async function routeApi(request, env, url) {
   if (path === "/api/affirmation" && method === "POST") return withSession(request, env, handleAffirmation);
   if (path === "/api/rewards" && method === "POST") return withSession(request, env, handleSetRewards);
 
+  // ── Easter Egg Challenge routes ──────────────────────────────────────────
+  if (path === "/api/egg-challenges/submit"  && method === "POST") return withSession(request, env, handleEggChallengeSubmit);
+  if (path === "/api/egg-challenges/approve" && method === "POST") return withSession(request, env, handleEggChallengeApprove);
+  if (path === "/api/egg-challenges/reject"  && method === "POST") return withSession(request, env, handleEggChallengeReject);
+  if (path === "/api/egg-challenges/complete"&& method === "POST") return withSession(request, env, handleEggChallengeComplete);
+  if (path === "/api/egg-challenges/verify"  && method === "POST") return withSession(request, env, handleEggChallengeVerify);
+  if (path === "/api/eggs/accept"            && method === "POST") return withSession(request, env, handleEggAccept);
+  if (path === "/api/eggs/activate"          && method === "POST") return withSession(request, env, handleEggActivate);
+  if (path === "/api/eggs/toggle"            && method === "POST") return withSession(request, env, handleEggToggle);
+
   return jsonResponse({ error: "not_found" }, 404);
 }
 
@@ -261,10 +271,51 @@ async function handleGetDashboard(request, env) {
 
 async function handleGetState(request, env, session) {
   const kidRoles = [...KID_ROLES];
+  const now = Date.now();
+
+  // ── Egg: auto-expire stale active_eggs ──────────────────────────────────
+  let activeEggs = await readJsonKey(env, "active_eggs", []);
+  const beforeCount = activeEggs.length;
+  activeEggs = activeEggs.filter(e => e.display_end >= now);
+  if (activeEggs.length !== beforeCount) {
+    await env.DAYCARE_KV.put("active_eggs", JSON.stringify(activeEggs));
+  }
+
+  // ── Egg: auto-activate if schedule says it's time ────────────────────────
+  const eggSchedule = await readJsonKey(env, "egg_schedule", {});
+  if (eggSchedule.enabled !== false && activeEggs.length < 3) {
+    const nextActivation = eggSchedule.next_activation || 0;
+    if (now >= nextActivation) {
+      const eggChallenges = await readJsonKey(env, "egg_challenges", []);
+      const approved = eggChallenges.filter(c => c.approved);
+      if (approved.length > 0) {
+        const chosen = approved[Math.floor(Math.random() * approved.length)];
+        const newEgg = {
+          id: crypto.randomUUID(),
+          challenge_id: chosen.id,
+          display_start: now,
+          display_end: now + 15 * 60 * 1000,
+          challenge_title: chosen.title,
+          challenge_description: chosen.description || "",
+          token_reward: chosen.token_reward,
+          time_limit_minutes: chosen.time_limit_minutes,
+        };
+        activeEggs.push(newEgg);
+        const cooldownMs = (30 + Math.floor(Math.random() * 60)) * 60 * 1000;
+        eggSchedule.last_activated = now;
+        eggSchedule.next_activation = now + cooldownMs;
+        await Promise.all([
+          env.DAYCARE_KV.put("active_eggs", JSON.stringify(activeEggs)),
+          env.DAYCARE_KV.put("egg_schedule", JSON.stringify(eggSchedule)),
+        ]);
+      }
+    }
+  }
+
   const [
     tokenValues,
     pending,
-    approved,
+    approvedKeys,
     denied,
     streaks,
     spendNotifications,
@@ -272,6 +323,8 @@ async function handleGetState(request, env, session) {
     scheduleStatuses,
     affirmations,
     rewards,
+    eggAcceptsRaw,
+    eggChallengesRaw,
   ] = await Promise.all([
     Promise.all(kidRoles.map(r => readNumber(env, tokensKey(r)))),
     readJsonKey(env, "pending", []),
@@ -283,17 +336,29 @@ async function handleGetState(request, env, session) {
     readScheduleStatuses(env),
     readJsonKey(env, "affirmations", []),
     readRewards(env),
+    readJsonKey(env, "egg_accepts", []),
+    readJsonKey(env, "egg_challenges", []),
   ]);
 
   const tokens = Object.fromEntries(kidRoles.map((r, i) => [r, tokenValues[i]]));
-  const twentyFourHoursAgo = Date.now() - 86400000;
+  const twentyFourHoursAgo = now - 86400000;
   const recentAffirmations = affirmations.filter(a => a.ts > twentyFourHoursAgo);
+
+  // ── Egg: filter accepts by role ──────────────────────────────────────────
+  const isParent = isParentRole(session.role);
+  const eggAccepts = isParent
+    ? eggAcceptsRaw
+    : eggAcceptsRaw.filter(a => a.kid_role === session.role);
+
+  const poolSize = eggChallengesRaw.filter(c => c.approved).length;
+  const pendingApproval = eggChallengesRaw.filter(c => !c.approved).length;
+  const pendingCompletion = eggAcceptsRaw.filter(a => a.completed_at && !a.approved).length;
 
   return jsonResponse({
     role: session.role,
     tokens,
     pending,
-    approved,
+    approved: approvedKeys,
     denied,
     streaks,
     chores,
@@ -301,6 +366,16 @@ async function handleGetState(request, env, session) {
     spendNotifications,
     affirmations: recentAffirmations,
     rewards,
+    active_eggs: activeEggs,
+    egg_accepts: eggAccepts,
+    egg_challenges_meta: {
+      pool_size: poolSize,
+      pending_approval: pendingApproval,
+      pending_completion: pendingCompletion,
+      last_activated: eggSchedule.last_activated || null,
+      enabled: eggSchedule.enabled !== false,
+    },
+    ...(isParent ? { egg_challenges_pending: eggChallengesRaw.filter(c => !c.approved) } : {}),
   });
 }
 
@@ -608,6 +683,257 @@ async function handleAffirmation(request, env, session) {
   }
 
   return jsonResponse({ ok: true, affirmation: entry });
+}
+
+// ---------- Easter Egg Challenge handlers ----------
+
+async function handleEggChallengeSubmit(request, env, session) {
+  const body = await readJson(request);
+  if (!body) return jsonResponse({ error: "invalid_json" }, 400);
+
+  const title = typeof body.title === "string" ? body.title.trim() : "";
+  const description = typeof body.description === "string" ? body.description.trim().slice(0, 300) : "";
+  const tokenReward = Number(body.token_reward);
+  const timeLimitMinutes = Number(body.time_limit_minutes);
+  const repeatable = body.repeatable !== false;
+
+  if (!title) return jsonResponse({ error: "title_required" }, 400);
+  if (!Number.isInteger(tokenReward) || tokenReward <= 0) return jsonResponse({ error: "invalid_token_reward" }, 400);
+  if (!Number.isInteger(timeLimitMinutes) || timeLimitMinutes < 5) return jsonResponse({ error: "invalid_time_limit" }, 400);
+
+  const challenges = await readJsonKey(env, "egg_challenges", []);
+  const newChallenge = {
+    id: crypto.randomUUID(),
+    title: title.slice(0, 80),
+    description,
+    created_by: session.role,
+    approved: isParentRole(session.role),
+    token_reward: tokenReward,
+    time_limit_minutes: timeLimitMinutes,
+    repeatable,
+    created_at: Date.now(),
+  };
+  challenges.push(newChallenge);
+  await env.DAYCARE_KV.put("egg_challenges", JSON.stringify(challenges));
+  return jsonResponse({ success: true, id: newChallenge.id });
+}
+
+async function handleEggChallengeApprove(request, env, session) {
+  if (!isParentRole(session.role)) return jsonResponse({ error: "dad_only" }, 403);
+  const body = await readJson(request);
+  if (!body || typeof body.id !== "string") return jsonResponse({ error: "invalid_id" }, 400);
+
+  const challenges = await readJsonKey(env, "egg_challenges", []);
+  const idx = challenges.findIndex(c => c.id === body.id);
+  if (idx === -1) return jsonResponse({ error: "not_found" }, 404);
+  challenges[idx].approved = true;
+  await env.DAYCARE_KV.put("egg_challenges", JSON.stringify(challenges));
+  return jsonResponse({ success: true });
+}
+
+async function handleEggChallengeReject(request, env, session) {
+  if (!isParentRole(session.role)) return jsonResponse({ error: "dad_only" }, 403);
+  const body = await readJson(request);
+  if (!body || typeof body.id !== "string") return jsonResponse({ error: "invalid_id" }, 400);
+
+  const challenges = await readJsonKey(env, "egg_challenges", []);
+  const filtered = challenges.filter(c => c.id !== body.id);
+  await env.DAYCARE_KV.put("egg_challenges", JSON.stringify(filtered));
+  return jsonResponse({ success: true });
+}
+
+async function handleEggAccept(request, env, session) {
+  const body = await readJson(request);
+  if (!body) return jsonResponse({ error: "invalid_json" }, 400);
+
+  const challengeId = typeof body.challenge_id === "string" ? body.challenge_id : "";
+  const kidRole = typeof body.kid_role === "string" ? body.kid_role : "";
+  const password = typeof body.password === "string" ? body.password : "";
+
+  if (!challengeId || !kidRole || !password) return jsonResponse({ error: "missing_fields" }, 400);
+  if (!KID_ROLES.has(kidRole)) return jsonResponse({ error: "invalid_kid_role" }, 400);
+
+  // Re-verify kid's password
+  const authRaw = await env.DAYCARE_KV.get(authKey(kidRole));
+  if (!authRaw) return jsonResponse({ error: "no_auth_for_kid" }, 400);
+  const authRecord = safeParseJson(authRaw);
+  if (!authRecord) return jsonResponse({ error: "corrupt_auth" }, 500);
+  const salt = base64ToBytes(authRecord.salt);
+  const computed = await derivePbkdf2(password, salt, authRecord.iterations);
+  if (!constantTimeEqual(bytesToBase64(computed), authRecord.hash)) {
+    return jsonResponse({ error: "wrong_password" }, 401);
+  }
+
+  // Validate active egg
+  const now = Date.now();
+  const activeEggs = await readJsonKey(env, "active_eggs", []);
+  const egg = activeEggs.find(e => e.challenge_id === challengeId);
+  if (!egg) return jsonResponse({ error: "egg_not_found" }, 404);
+  if (now > egg.display_end + 60000) return jsonResponse({ error: "egg_expired" }, 400);
+
+  // Dedup check
+  const eggAccepts = await readJsonKey(env, "egg_accepts", []);
+  const existing = eggAccepts.find(a => a.challenge_id === challengeId && a.kid_role === kidRole && !a.completed_at);
+  if (existing) return jsonResponse({ error: "already_accepted" }, 409);
+
+  const newAccept = {
+    id: crypto.randomUUID(),
+    challenge_id: challengeId,
+    challenge_title: egg.challenge_title,
+    kid_role: kidRole,
+    accepted_at: now,
+    expires_at: egg.display_end + 60000,
+    time_limit_minutes: egg.time_limit_minutes,
+    token_reward: egg.token_reward,
+    completed_at: null,
+    approved: false,
+    tokens_awarded: 0,
+  };
+  eggAccepts.push(newAccept);
+  await env.DAYCARE_KV.put("egg_accepts", JSON.stringify(eggAccepts));
+  return jsonResponse({ success: true, challenge_title: egg.challenge_title, token_reward: egg.token_reward, time_limit_minutes: egg.time_limit_minutes });
+}
+
+async function handleEggActivate(request, env, session) {
+  if (!isParentRole(session.role)) return jsonResponse({ error: "dad_only" }, 403);
+
+  const now = Date.now();
+  const [activeEggs, eggChallenges, eggSchedule] = await Promise.all([
+    readJsonKey(env, "active_eggs", []),
+    readJsonKey(env, "egg_challenges", []),
+    readJsonKey(env, "egg_schedule", {}),
+  ]);
+
+  if (eggSchedule.enabled === false) return jsonResponse({ error: "eggs_disabled" }, 400);
+  const current = activeEggs.filter(e => e.display_end >= now);
+  if (current.length >= 3) return jsonResponse({ error: "max_eggs_active" }, 400);
+
+  const pool = eggChallenges.filter(c => c.approved);
+  if (!pool.length) return jsonResponse({ error: "no_approved_challenges" }, 400);
+
+  const chosen = pool[Math.floor(Math.random() * pool.length)];
+  const newEgg = {
+    id: crypto.randomUUID(),
+    challenge_id: chosen.id,
+    display_start: now,
+    display_end: now + 15 * 60 * 1000,
+    challenge_title: chosen.title,
+    challenge_description: chosen.description || "",
+    token_reward: chosen.token_reward,
+    time_limit_minutes: chosen.time_limit_minutes,
+  };
+  current.push(newEgg);
+
+  const cooldownMs = (30 + Math.floor(Math.random() * 60)) * 60 * 1000;
+  eggSchedule.last_activated = now;
+  eggSchedule.next_activation = now + cooldownMs;
+
+  await Promise.all([
+    env.DAYCARE_KV.put("active_eggs", JSON.stringify(current)),
+    env.DAYCARE_KV.put("egg_schedule", JSON.stringify(eggSchedule)),
+  ]);
+  return jsonResponse({ success: true });
+}
+
+async function handleEggToggle(request, env, session) {
+  if (!isParentRole(session.role)) return jsonResponse({ error: "dad_only" }, 403);
+  const body = await readJson(request);
+  if (!body || typeof body.enabled !== "boolean") return jsonResponse({ error: "invalid_body" }, 400);
+
+  const eggSchedule = await readJsonKey(env, "egg_schedule", {});
+  eggSchedule.enabled = body.enabled;
+  await env.DAYCARE_KV.put("egg_schedule", JSON.stringify(eggSchedule));
+  return jsonResponse({ success: true });
+}
+
+async function handleEggChallengeComplete(request, env, session) {
+  if (isParentRole(session.role)) return jsonResponse({ error: "kids_only" }, 403);
+  const body = await readJson(request);
+  if (!body || typeof body.accept_id !== "string") return jsonResponse({ error: "invalid_accept_id" }, 400);
+
+  const now = Date.now();
+  const eggAccepts = await readJsonKey(env, "egg_accepts", []);
+  const idx = eggAccepts.findIndex(a => a.id === body.accept_id);
+  if (idx === -1) return jsonResponse({ error: "accept_not_found" }, 404);
+
+  const accept = eggAccepts[idx];
+  if (accept.kid_role !== session.role) return jsonResponse({ error: "not_your_challenge" }, 403);
+  if (accept.completed_at !== null) return jsonResponse({ error: "already_completed" }, 409);
+  if (now > accept.expires_at) return jsonResponse({ error: "window_expired" }, 400);
+
+  accept.completed_at = now;
+  eggAccepts[idx] = accept;
+
+  const pending = await readJsonKey(env, "pending", []);
+  const pendingKey = `egg-complete-${accept.id}`;
+  if (!pending.some(p => p.key === pendingKey)) {
+    pending.push({
+      key: pendingKey,
+      type: "egg_challenge",
+      accept_id: accept.id,
+      kid_role: session.role,
+      challenge_id: accept.challenge_id,
+      challenge_title: accept.challenge_title,
+      token_reward: accept.token_reward,
+      time_limit_minutes: accept.time_limit_minutes,
+      accepted_at: accept.accepted_at,
+      completed_at: now,
+      ts: now,
+    });
+  }
+
+  await Promise.all([
+    env.DAYCARE_KV.put("egg_accepts", JSON.stringify(eggAccepts)),
+    env.DAYCARE_KV.put("pending", JSON.stringify(pending)),
+  ]);
+  return jsonResponse({ success: true });
+}
+
+async function handleEggChallengeVerify(request, env, session) {
+  if (!isParentRole(session.role)) return jsonResponse({ error: "dad_only" }, 403);
+  const body = await readJson(request);
+  if (!body || typeof body.accept_id !== "string" || !["approve", "deny"].includes(body.action)) {
+    return jsonResponse({ error: "invalid_body" }, 400);
+  }
+
+  const eggAccepts = await readJsonKey(env, "egg_accepts", []);
+  const pending = await readJsonKey(env, "pending", []);
+  const pendingKey = `egg-complete-${body.accept_id}`;
+  const acceptIdx = eggAccepts.findIndex(a => a.id === body.accept_id);
+  if (acceptIdx === -1) return jsonResponse({ error: "accept_not_found" }, 404);
+
+  const accept = eggAccepts[acceptIdx];
+  const remainingPending = pending.filter(p => p.key !== pendingKey);
+
+  if (body.action === "deny") {
+    await env.DAYCARE_KV.put("pending", JSON.stringify(remainingPending));
+    return jsonResponse({ success: true });
+  }
+
+  // Compute multiplier
+  const timeUsedMinutes = (accept.completed_at - accept.accepted_at) / 60000;
+  const pct = timeUsedMinutes / accept.time_limit_minutes;
+  let multiplier = pct <= 0.25 ? 2.0 : pct <= 0.50 ? 1.6 : pct <= 0.75 ? 1.4 : pct <= 1.00 ? 1.2 : 1.0;
+
+  // Option A: cap at 1.2 if kid hasn't completed any chores today
+  const todayKey = getTodayKeyUtc();
+  const approvedKeys = await readJsonKey(env, "approved", []);
+  const chores = await readChores(env);
+  const kidChoresDoneToday = chores.some(ch => approvedKeys.includes(`${accept.kid_role}:${ch.id}:${todayKey}`));
+  if (!kidChoresDoneToday) multiplier = Math.min(multiplier, 1.2);
+
+  const tokens = Math.round(accept.token_reward * multiplier);
+  const currentBalance = await readNumber(env, tokensKey(accept.kid_role));
+  accept.approved = true;
+  accept.tokens_awarded = tokens;
+  eggAccepts[acceptIdx] = accept;
+
+  await Promise.all([
+    env.DAYCARE_KV.put("egg_accepts", JSON.stringify(eggAccepts)),
+    env.DAYCARE_KV.put("pending", JSON.stringify(remainingPending)),
+    env.DAYCARE_KV.put(tokensKey(accept.kid_role), String(currentBalance + tokens)),
+  ]);
+  return jsonResponse({ success: true, tokens_awarded: tokens, multiplier });
 }
 
 // ---------- Session middleware ----------
