@@ -38,6 +38,7 @@ let dashboardClockTimer = null;
 let dashboardRefreshTimer = null;
 let dashboardRefreshInFlight = false;
 let eggTimerIntervals = [];
+let eggAdminInFlight = false;
 let dashboardAudioContext = null;
 let dashboardAlerts = [];
 let dashboardAlertId = 0;
@@ -1439,6 +1440,7 @@ async function refreshState(options = {}) {
     egg_accepts: state.egg_accepts || [],
     egg_challenges_meta: state.egg_challenges_meta || {},
     egg_challenges_pending: state.egg_challenges_pending || [],
+    egg_challenges_approved: state.egg_challenges_approved || [],
   };
   announceDashboardChanges(previousSnapshot, buildDashboardSnapshot(appState), options);
   return appState;
@@ -3324,9 +3326,10 @@ async function submitEggIdea() {
 }
 
 function renderEggAdminSection(container) {
-  const meta    = appState.egg_challenges_meta || {};
-  const pending = appState.egg_challenges_pending || [];
-  const poolOk  = (meta.pool_size || 0) >= 3;
+  const meta     = appState.egg_challenges_meta || {};
+  const pending  = appState.egg_challenges_pending || [];
+  const approved = appState.egg_challenges_approved || [];
+  const poolOk   = (meta.pool_size || 0) >= 3;
   const enabled = meta.enabled !== false;
 
   let lastActStr = "Never";
@@ -3380,6 +3383,21 @@ function renderEggAdminSection(container) {
     html += "<p style='color:#9ca3af;font-size:0.85rem'>No pending challenge ideas.</p>";
   }
 
+  if (approved.length) {
+    html += "<p class='egg-section-header'>Challenge Pool</p>";
+    approved.forEach(c => {
+      html += `<div class="egg-pending-idea">
+        <div>
+          <strong>${escapeHtml(c.title)}</strong>
+          <div class="egg-idea-meta">${escapeHtml(c.description || "")} &middot; ${c.token_reward} ☀️ &middot; ${c.time_limit_minutes} min</div>
+        </div>
+        <div style="flex-shrink:0">
+          <button onclick="rejectEggChallenge('${c.id}')" style="background:#ef4444;color:white;border:none;border-radius:4px;padding:0.3rem 0.6rem;cursor:pointer;font-size:0.8rem">✗</button>
+        </div>
+      </div>`;
+    });
+  }
+
   container.innerHTML = html;
 }
 
@@ -3406,21 +3424,27 @@ async function toggleEggs() {
 }
 
 async function approveEggChallenge(id) {
+  if (eggAdminInFlight) return;
+  eggAdminInFlight = true;
   try {
     await apiFetch("/api/egg-challenges/approve", { method: "POST", body: JSON.stringify({ id }) });
     showMessage("Challenge approved and added to pool! ✅");
     await refreshState();
   } catch {
     showMessage("Could not approve.", "#e74c3c");
+  } finally {
+    eggAdminInFlight = false;
   }
 }
 
 async function submitParentEggIdea() {
+  if (eggAdminInFlight) return;
   const title = (document.getElementById("parent-egg-title").value || "").trim();
   const desc  = (document.getElementById("parent-egg-desc").value || "").trim();
   const tokens = Number(document.getElementById("parent-egg-tokens").value);
   const time   = Number(document.getElementById("parent-egg-time").value);
   if (!title) { showMessage("Challenge title required.", "#e74c3c"); return; }
+  eggAdminInFlight = true;
   try {
     await apiFetch("/api/egg-challenges/submit", {
       method: "POST",
@@ -3434,16 +3458,22 @@ async function submitParentEggIdea() {
     await refreshState();
   } catch (e) {
     showMessage("Could not submit: " + (e.message || "unknown error"), "#e74c3c");
+  } finally {
+    eggAdminInFlight = false;
   }
 }
 
 async function rejectEggChallenge(id) {
+  if (eggAdminInFlight) return;
+  eggAdminInFlight = true;
   try {
     await apiFetch("/api/egg-challenges/reject", { method: "POST", body: JSON.stringify({ id }) });
     showMessage("Challenge idea removed.");
     await refreshState();
   } catch {
     showMessage("Could not reject.", "#e74c3c");
+  } finally {
+    eggAdminInFlight = false;
   }
 }
 
