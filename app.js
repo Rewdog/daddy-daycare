@@ -53,7 +53,11 @@ let appState = {
   scheduleStatuses: {},
   spendNotifications: [],
   affirmations: [],
-  rewards: []
+  rewards: [],
+  active_eggs: [],
+  egg_accepts: [],
+  egg_challenges_meta: {},
+  egg_challenges_pending: [],
 };
 
 const SCHEDULE_STATUS_LABELS = {
@@ -1273,7 +1277,11 @@ function resetAppState() {
     scheduleStatuses: {},
     spendNotifications: [],
     affirmations: [],
-    rewards: []
+    rewards: [],
+    active_eggs: [],
+    egg_accepts: [],
+    egg_challenges_meta: {},
+    egg_challenges_pending: [],
   };
 }
 
@@ -1324,7 +1332,11 @@ async function refreshState(options = {}) {
     scheduleStatuses: state.scheduleStatuses || {},
     spendNotifications: state.spendNotifications || [],
     affirmations: state.affirmations || [],
-    rewards: state.rewards || []
+    rewards: state.rewards || [],
+    active_eggs: state.active_eggs || [],
+    egg_accepts: state.egg_accepts || [],
+    egg_challenges_meta: state.egg_challenges_meta || {},
+    egg_challenges_pending: state.egg_challenges_pending || [],
   };
   announceDashboardChanges(previousSnapshot, buildDashboardSnapshot(appState), options);
   return appState;
@@ -2442,6 +2454,17 @@ function renderKidView() {
     }
   }
 
+  // Easter Egg Challenges section
+  const kidViewEl = document.getElementById("kid-view");
+  let eggSection = document.getElementById("egg-challenges-section");
+  if (!eggSection && kidViewEl) {
+    eggSection = document.createElement("section");
+    eggSection.id = "egg-challenges-section";
+    kidViewEl.appendChild(eggSection);
+  }
+  if (eggSection) renderEggChallengesSection(eggSection);
+  renderEggOverlay();
+
   // Inject affirmation section into kid view (not in index.html — kids built that)
   const kidView = document.getElementById("kid-view");
   let affirmSection = document.getElementById("kid-affirmation-section");
@@ -2713,16 +2736,33 @@ function renderParentView() {
   if (pending.length === 0) {
     list.innerHTML = "<p>No pending approvals.</p>";
   } else {
-    list.innerHTML = pending.map(p => `
-      <div class="chore-item">
+    list.innerHTML = pending.map(p => {
+      if (p.type === "egg_challenge") {
+        const timeUsed = p.completed_at && p.accepted_at
+          ? Math.round((p.completed_at - p.accepted_at) / 60000) : 0;
+        const pct = p.time_limit_minutes ? timeUsed / p.time_limit_minutes : 1;
+        const mx = pct <= 0.25 ? 2.0 : pct <= 0.50 ? 1.6 : pct <= 0.75 ? 1.4 : pct <= 1.00 ? 1.2 : 1.0;
+        const award = Math.round((p.token_reward || 0) * mx);
+        return `<div class="chore-item">
+          <span>
+            <strong>${escapeHtml(p.kid_role)}</strong>: 🥚 ${escapeHtml(p.challenge_title || "Challenge")}<br>
+            <small style="color:#6b7280">${timeUsed} of ${p.time_limit_minutes} min used &middot; ${mx}x multiplier &middot; ${award} ☀️</small>
+          </span>
+          <div>
+            <button style="background:#f59e0b;color:white;width:auto;margin:2px" onclick="submitEggVerify('${p.accept_id}','approve')">🏆 Award ${award} ☀️</button>
+            <button style="background:#e74c3c;width:auto;margin:2px" onclick="submitEggVerify('${p.accept_id}','deny')">❌ Deny</button>
+          </div>
+        </div>`;
+      }
+      return `<div class="chore-item">
         <span><strong>${escapeHtml(p.user)}</strong>: ${escapeHtml(pendingLabel(p))}</span>
         <div>
           ${p.type === "chore" && p.isAdHoc ? `<input id="${getPendingAmountInputId(p.key)}" class="pending-amount-input" type="number" min="1" step="1" value="10" />` : ""}
           <button style="background:#27ae60;width:auto;margin:2px" onclick="approvePending('${p.key}')">✅ Approve</button>
           <button style="background:#e74c3c;width:auto;margin:2px" onclick="denyPending('${p.key}')">❌ Deny</button>
         </div>
-      </div>
-    `).join("");
+      </div>`;
+    }).join("");
   }
 
   familyConfig.kidRoles.forEach(kid => {
@@ -2746,6 +2786,16 @@ function renderParentView() {
   renderChoreAdmin();
   renderRewardsAdmin();
   renderDashboardMode();
+
+  // Easter Egg admin
+  let eggAdminSection = document.getElementById("egg-admin-section");
+  if (!eggAdminSection) {
+    eggAdminSection = document.createElement("section");
+    eggAdminSection.id = "egg-admin-section";
+    document.getElementById("parent-view").appendChild(eggAdminSection);
+  }
+  renderEggAdminSection(eggAdminSection);
+  renderEggOverlay();
 }
 
 async function adjustTokens(user, direction) {
@@ -2787,6 +2837,14 @@ function choreLabel(id) {
 }
 
 function pendingLabel(item) {
+  if (item.type === "egg_challenge") {
+    const mins = item.time_limit_minutes || 0;
+    const used = item.completed_at && item.accepted_at
+      ? Math.round((item.completed_at - item.accepted_at) / 60000)
+      : 0;
+    return `🥚 ${item.challenge_title || "Challenge"} — ${item.kid_role} · ${used}/${mins} min`;
+  }
+
   if (item.type === "streak") {
     const streakLabel = STREAK_DEFS[item.id]?.label || item.id;
     if (item.mode === "vacation-hold") {
@@ -2889,6 +2947,419 @@ function showMessage(text, color = "#2ecc71") {
   message.style.opacity = "1";
   clearTimeout(message._timeout);
   message._timeout = setTimeout(() => { message.style.opacity = "0"; }, 2500);
+}
+
+// ── Easter Egg Challenge System ──────────────────────────────────────────────
+
+let _eggModalEgg = null;
+let _eggModalKidRole = null;
+let _eggCountdownInterval = null;
+
+function renderEggOverlay() {
+  const existing = document.getElementById("egg-overlay");
+  if (existing) existing.remove();
+  const eggs = appState.active_eggs || [];
+  if (!eggs.length) return;
+  const now = Date.now();
+  const visible = eggs.filter(e => e.display_end >= now);
+  if (!visible.length) return;
+
+  const overlay = document.createElement("div");
+  overlay.id = "egg-overlay";
+  overlay.className = "egg-overlay";
+  document.body.appendChild(overlay);
+
+  const colors = ["egg-color-warm", "egg-color-sage", "egg-color-sky"];
+  const isTv = document.body.classList.contains("dashboard-mode");
+
+  visible.forEach((egg, i) => {
+    const el = document.createElement("div");
+    el.className = "floating-egg " + colors[i % colors.length] + (isTv ? " egg-tv" : "");
+    el.style.top  = (10 + Math.random() * 75) + "%";
+    el.style.left = (10 + Math.random() * 75) + "%";
+    el.style.fontSize = (28 + Math.random() * 28) + "px"; // 28–56px random per egg
+    el.textContent = "🥚";
+    el.title = "Click me!";
+    el.addEventListener("click", () => openEggModal(egg));
+    overlay.appendChild(el);
+  });
+}
+
+function openEggModal(egg) {
+  _eggModalEgg = egg;
+  document.getElementById("egg-modal-title").textContent = egg.challenge_title || "Challenge";
+  document.getElementById("egg-modal-desc").textContent  = egg.challenge_description || "";
+  document.getElementById("egg-modal-tokens").textContent = egg.token_reward || 0;
+  document.getElementById("egg-modal-timelimit").textContent = (egg.time_limit_minutes || 0) + " min time limit";
+  document.getElementById("egg-modal-error").style.display = "none";
+  document.getElementById("egg-modal-pw").value = "";
+
+  if (_eggCountdownInterval) clearInterval(_eggCountdownInterval);
+  const countdownEl = document.getElementById("egg-modal-countdown");
+  function updateCountdown() {
+    const rem = Math.max(0, egg.display_end - Date.now());
+    const m = Math.floor(rem / 60000);
+    const s = Math.floor((rem % 60000) / 1000);
+    countdownEl.textContent = "Egg disappears in: " + m + ":" + String(s).padStart(2, "0");
+    if (rem <= 0) { clearInterval(_eggCountdownInterval); countdownEl.textContent = "Window closed (grace period still active)"; }
+  }
+  updateCountdown();
+  _eggCountdownInterval = setInterval(updateCountdown, 1000);
+
+  const kidSelect = document.getElementById("egg-modal-kidselect");
+  const pwField   = document.getElementById("egg-modal-pwfield");
+  const isKid = currentUser && !isParentUser(currentUser);
+
+  if (isKid) {
+    _eggModalKidRole = currentUser;
+    kidSelect.style.display = "none";
+    pwField.style.display   = "block";
+    document.getElementById("egg-modal-kidlabel").textContent = "Enter your password to accept:";
+  } else {
+    _eggModalKidRole = null;
+    kidSelect.style.display = "block";
+    pwField.style.display   = "none";
+    const btns = document.getElementById("egg-kid-buttons");
+    btns.innerHTML = "";
+    familyConfig.kidRoles.forEach(k => {
+      const b = document.createElement("button");
+      b.textContent = k;
+      b.style.cssText = "padding:0.5rem 1rem;border:1px solid #d1d5db;border-radius:6px;background:white;color:#1f2937;cursor:pointer;font-size:1rem";
+      b.onclick = () => {
+        _eggModalKidRole = k;
+        kidSelect.style.display = "none";
+        pwField.style.display   = "block";
+        document.getElementById("egg-modal-kidlabel").textContent = k + " — enter your password:";
+      };
+      btns.appendChild(b);
+    });
+  }
+
+  const modal = document.getElementById("egg-discovery-modal");
+  modal.style.display = "flex";
+}
+
+function closeEggModal() {
+  if (_eggCountdownInterval) clearInterval(_eggCountdownInterval);
+  document.getElementById("egg-discovery-modal").style.display = "none";
+  _eggModalEgg = null;
+  _eggModalKidRole = null;
+}
+
+async function submitEggAccept() {
+  if (!_eggModalEgg || !_eggModalKidRole) return;
+  const pw  = document.getElementById("egg-modal-pw").value;
+  const err = document.getElementById("egg-modal-error");
+  const btn = document.getElementById("egg-modal-accept-btn");
+  err.style.display = "none";
+  btn.disabled = true;
+  btn.textContent = "Accepting…";
+  try {
+    const data = await apiFetch("/api/eggs/accept", {
+      method: "POST",
+      body: JSON.stringify({ challenge_id: _eggModalEgg.challenge_id, kid_role: _eggModalKidRole, password: pw })
+    });
+    if (data && data.success) {
+      closeEggModal();
+      showMessage("Challenge accepted! Good luck, " + _eggModalKidRole + "! 🥚");
+      await refreshState();
+    }
+  } catch (e) {
+    const msg = e.message || "";
+    err.textContent = msg.includes("401") || msg.includes("wrong_password")
+      ? "Wrong password. Try again."
+      : msg.includes("409") ? "Already accepted this challenge!"
+      : msg.includes("400") ? "Egg has expired."
+      : "Something went wrong. Try again.";
+    err.style.display = "block";
+    btn.disabled = false;
+    btn.textContent = "Accept Challenge";
+  }
+}
+
+function renderEggChallengesSection(container) {
+  const now = Date.now();
+  const accepts = appState.egg_accepts || [];
+
+  const active   = accepts.filter(a => !a.completed_at && a.expires_at > now);
+  const pending  = accepts.filter(a =>  a.completed_at && !a.approved);
+  const approved = accepts.filter(a =>  a.approved);
+  const expired  = accepts.filter(a => !a.completed_at && a.expires_at <= now);
+
+  function fmtTime(ms) {
+    const m = Math.floor(ms / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    return m + ":" + String(s).padStart(2, "0");
+  }
+
+  function calcDisplayMx(a) {
+    const tlm = a.time_limit_minutes || 0;
+    if (!tlm) return "?";
+    const used = (now - a.accepted_at) / 60000;
+    const pct  = used / tlm;
+    if (pct <= 0.25) return "2.0";
+    if (pct <= 0.50) return "1.6";
+    if (pct <= 0.75) return "1.4";
+    if (pct <= 1.00) return "1.2";
+    return "1.0";
+  }
+
+  let html = "<h2>🥚 Easter Egg Challenges</h2>";
+
+  if (active.length) {
+    html += "<p class='egg-section-header' style='color:#d97706'>🟡 Active Challenges</p>";
+    active.forEach(a => {
+      const rem = a.expires_at - now;
+      const mx  = calcDisplayMx(a);
+      const pot = Math.round((a.token_reward || 0) * parseFloat(mx));
+      html += `<div class="egg-challenge-card">
+        <div style="min-width:0;flex:1">
+          <strong style="display:block;word-break:break-word">${escapeHtml(a.challenge_title || "Challenge")}</strong>
+          <span class="egg-multiplier-badge">up to ${mx}x = ${pot} ☀️</span>
+          <span class="egg-challenge-timer" id="egg-timer-${a.id}">⏱ ${fmtTime(Math.max(0, rem))}</span>
+        </div>
+        <button onclick="submitEggComplete('${a.id}')"
+          style="background:#f59e0b;color:white;border:none;border-radius:6px;padding:0.5rem 1rem;font-size:0.9rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;width:auto;margin-left:0.75rem">
+          I Did It!
+        </button>
+      </div>`;
+    });
+  }
+
+  if (pending.length) {
+    html += "<p class='egg-section-header' style='color:#6b7280'>⏳ Pending Approval</p>";
+    pending.forEach(a => {
+      html += `<div class="egg-challenge-card"><strong>${escapeHtml(a.challenge_title || "Challenge")}</strong><span style="font-size:0.82rem;color:#6b7280">Waiting for dad 👀</span></div>`;
+    });
+  }
+
+  if (approved.length) {
+    html += "<p class='egg-section-header' style='color:#16a34a'>✅ Completed</p>";
+    approved.forEach(a => {
+      html += `<div class="egg-challenge-card"><strong>${escapeHtml(a.challenge_title || "Challenge")}</strong><span style="color:#16a34a;font-weight:700">+${a.tokens_awarded} ☀️</span></div>`;
+    });
+  }
+
+  if (expired.length) {
+    html += "<p class='egg-section-header' style='color:#9ca3af'>❌ Missed</p>";
+    expired.forEach(a => {
+      html += `<div class="egg-challenge-card expired"><strong>${escapeHtml(a.challenge_title || "Challenge")}</strong><span style="font-size:0.8rem;color:#9ca3af">missed window</span></div>`;
+    });
+  }
+
+  if (!active.length && !pending.length && !approved.length && !expired.length) {
+    html += "<p style='color:#9ca3af;font-size:0.85rem'>No egg challenges yet. Keep an eye out for hidden eggs! 🥚</p>";
+  }
+
+  html += `<details style="margin-top:1rem"><summary style="cursor:pointer;font-size:0.9rem;color:#6b7280;list-style:none">💡 Submit a Challenge Idea ▸</summary>
+    <div class="egg-submit-form">
+      <input id="egg-idea-title" placeholder="Challenge title (e.g. Build the robot kit)" maxlength="80">
+      <textarea id="egg-idea-desc" placeholder="What's the challenge? (optional)" rows="2"></textarea>
+      <input id="egg-idea-tokens" type="number" placeholder="Suggested tokens (e.g. 40)" min="1" max="500">
+      <input id="egg-idea-time"   type="number" placeholder="Time limit in minutes (e.g. 120)" min="5" max="480">
+      <button onclick="submitEggIdea()"
+        style="margin-top:0.5rem;width:100%;background:#6b7280;color:white;border:none;border-radius:6px;padding:0.5rem;cursor:pointer">
+        Submit Idea
+      </button>
+    </div>
+  </details>`;
+
+  container.innerHTML = html;
+
+  // Live timers
+  active.forEach(a => {
+    const el = document.getElementById("egg-timer-" + a.id);
+    if (!el) return;
+    const iv = setInterval(() => {
+      const rem = a.expires_at - Date.now();
+      if (rem <= 0) { clearInterval(iv); el.textContent = "⏱ 0:00 (grace)"; return; }
+      el.textContent = "⏱ " + fmtTime(rem);
+    }, 1000);
+  });
+}
+
+async function submitEggComplete(acceptId) {
+  try {
+    const data = await apiFetch("/api/egg-challenges/complete", {
+      method: "POST",
+      body: JSON.stringify({ accept_id: acceptId })
+    });
+    if (data && data.success) {
+      showMessage("Nice work! Submitted for dad's approval 🏆");
+      await refreshState();
+    }
+  } catch (e) {
+    const msg = e.message || "";
+    showMessage(msg.includes("400") ? "Challenge window expired." : "Could not submit. Try again.", "#e74c3c");
+  }
+}
+
+async function submitEggIdea() {
+  const title   = (document.getElementById("egg-idea-title")?.value || "").trim();
+  const desc    = (document.getElementById("egg-idea-desc")?.value  || "").trim();
+  const tokens  = parseInt(document.getElementById("egg-idea-tokens")?.value || "0", 10);
+  const minutes = parseInt(document.getElementById("egg-idea-time")?.value   || "0", 10);
+
+  if (!title)           { showMessage("Please enter a challenge title.", "#e74c3c"); return; }
+  if (tokens < 1)       { showMessage("Please enter a valid token reward.", "#e74c3c"); return; }
+  if (minutes < 5)      { showMessage("Time limit must be at least 5 minutes.", "#e74c3c"); return; }
+
+  try {
+    const data = await apiFetch("/api/egg-challenges/submit", {
+      method: "POST",
+      body: JSON.stringify({ title, description: desc, token_reward: tokens, time_limit_minutes: minutes, repeatable: true })
+    });
+    if (data && data.success) {
+      showMessage("Idea submitted! Dad will review it 👍");
+      await refreshState();
+    }
+  } catch {
+    showMessage("Could not submit idea. Try again.", "#e74c3c");
+  }
+}
+
+function renderEggAdminSection(container) {
+  const meta    = appState.egg_challenges_meta || {};
+  const pending = appState.egg_challenges_pending || [];
+  const poolOk  = (meta.pool_size || 0) >= 3;
+  const enabled = meta.enabled !== false;
+
+  let lastActStr = "Never";
+  if (meta.last_activated) {
+    const hoursAgo = Math.round((Date.now() - meta.last_activated) / 3600000);
+    lastActStr = hoursAgo < 1 ? "Less than an hour ago" : hoursAgo + " hour" + (hoursAgo === 1 ? "" : "s") + " ago";
+  }
+
+  let html = `<h2>🥚 Challenge Admin</h2>
+    <div class="egg-pool-status">
+      <span class="egg-pool-stat ${poolOk ? "" : "warning"}">${meta.pool_size || 0} challenges ready${poolOk ? "" : " ⚠️ low"}</span>
+      <span class="egg-pool-stat">${meta.pending_approval || 0} pending approval</span>
+      <span class="egg-pool-stat">${meta.pending_completion || 0} awaiting completion review</span>
+    </div>
+    <div class="egg-last-activated">Last egg appeared: ${lastActStr}</div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.75rem">
+      <button onclick="activateEggNow()" style="background:#f59e0b;color:white;border:none;border-radius:6px;padding:0.5rem 0.9rem;cursor:pointer;font-size:0.9rem">
+        🥚 Activate Egg Now
+      </button>
+      <button onclick="toggleEggs()" style="background:${enabled ? "#ef4444" : "#22c55e"};color:white;border:none;border-radius:6px;padding:0.5rem 0.9rem;cursor:pointer;font-size:0.9rem">
+        ${enabled ? "⏸ Disable Eggs" : "▶ Enable Eggs"}
+      </button>
+    </div>`;
+
+  html += `<p class='egg-section-header'>Add a Challenge Idea</p>
+    <div class="egg-submit-form">
+      <input id="parent-egg-title" type="text" placeholder="Challenge title (e.g. Build the robot kit)" />
+      <textarea id="parent-egg-desc" placeholder="Optional description" rows="2"></textarea>
+      <div style="display:flex;gap:0.5rem">
+        <input id="parent-egg-tokens" type="number" placeholder="Tokens (e.g. 40)" min="1" style="width:50%" />
+        <input id="parent-egg-time" type="number" placeholder="Minutes (e.g. 120)" min="5" style="width:50%" />
+      </div>
+      <button onclick="submitParentEggIdea()">Submit Idea</button>
+    </div>`;
+
+  if (pending.length) {
+    html += "<p class='egg-section-header'>Pending Challenge Ideas</p>";
+    pending.forEach(c => {
+      html += `<div class="egg-pending-idea">
+        <div>
+          <strong>${escapeHtml(c.title)}</strong>
+          <div class="egg-idea-meta">${escapeHtml(c.description || "")} &middot; ${c.token_reward} ☀️ &middot; ${c.time_limit_minutes} min &middot; from ${escapeHtml(c.created_by)}</div>
+        </div>
+        <div style="display:flex;gap:0.3rem;flex-shrink:0">
+          <button onclick="approveEggChallenge('${c.id}')" style="background:#22c55e;color:white;border:none;border-radius:4px;padding:0.3rem 0.6rem;cursor:pointer;font-size:0.8rem">✓</button>
+          <button onclick="rejectEggChallenge('${c.id}')"  style="background:#ef4444;color:white;border:none;border-radius:4px;padding:0.3rem 0.6rem;cursor:pointer;font-size:0.8rem">✗</button>
+        </div>
+      </div>`;
+    });
+  } else {
+    html += "<p style='color:#9ca3af;font-size:0.85rem'>No pending challenge ideas.</p>";
+  }
+
+  container.innerHTML = html;
+}
+
+async function activateEggNow() {
+  try {
+    await apiFetch("/api/eggs/activate", { method: "POST", body: "{}" });
+    showMessage("Egg activated! 🥚");
+    await refreshState();
+  } catch (e) {
+    const msg = e.message || "";
+    showMessage(msg.includes("max_eggs") ? "Already 3 eggs active." : msg.includes("no_approved") ? "No approved challenges in pool." : "Could not activate.", "#e74c3c");
+  }
+}
+
+async function toggleEggs() {
+  const enabled = (appState.egg_challenges_meta || {}).enabled !== false;
+  try {
+    await apiFetch("/api/eggs/toggle", { method: "POST", body: JSON.stringify({ enabled: !enabled }) });
+    showMessage(enabled ? "Eggs disabled." : "Eggs enabled!");
+    await refreshState();
+  } catch {
+    showMessage("Could not toggle eggs.", "#e74c3c");
+  }
+}
+
+async function approveEggChallenge(id) {
+  try {
+    await apiFetch("/api/egg-challenges/approve", { method: "POST", body: JSON.stringify({ id }) });
+    showMessage("Challenge approved and added to pool! ✅");
+    await refreshState();
+  } catch {
+    showMessage("Could not approve.", "#e74c3c");
+  }
+}
+
+async function submitParentEggIdea() {
+  const title = (document.getElementById("parent-egg-title").value || "").trim();
+  const desc  = (document.getElementById("parent-egg-desc").value || "").trim();
+  const tokens = Number(document.getElementById("parent-egg-tokens").value);
+  const time   = Number(document.getElementById("parent-egg-time").value);
+  if (!title) { showMessage("Challenge title required.", "#e74c3c"); return; }
+  try {
+    await apiFetch("/api/egg-challenges/submit", {
+      method: "POST",
+      body: JSON.stringify({ title, description: desc, token_reward: tokens, time_limit_minutes: time })
+    });
+    showMessage("Idea submitted and auto-approved! ✅");
+    document.getElementById("parent-egg-title").value = "";
+    document.getElementById("parent-egg-desc").value  = "";
+    document.getElementById("parent-egg-tokens").value = "";
+    document.getElementById("parent-egg-time").value   = "";
+    await refreshState();
+  } catch (e) {
+    showMessage("Could not submit: " + (e.message || "unknown error"), "#e74c3c");
+  }
+}
+
+async function rejectEggChallenge(id) {
+  try {
+    await apiFetch("/api/egg-challenges/reject", { method: "POST", body: JSON.stringify({ id }) });
+    showMessage("Challenge idea removed.");
+    await refreshState();
+  } catch {
+    showMessage("Could not reject.", "#e74c3c");
+  }
+}
+
+async function submitEggVerify(acceptId, action) {
+  try {
+    const data = await apiFetch("/api/egg-challenges/verify", {
+      method: "POST",
+      body: JSON.stringify({ accept_id: acceptId, action })
+    });
+    if (data && data.success) {
+      if (action === "approve") {
+        showMessage("Challenge approved! " + (data.tokens_awarded || 0) + " ☀️ awarded 🏆");
+      } else {
+        showMessage("Challenge denied.", "#e74c3c");
+      }
+      await refreshState();
+      renderParentView();
+    }
+  } catch {
+    showMessage("Could not process. Try again.", "#e74c3c");
+  }
 }
 
 document.getElementById("login-password").addEventListener("keydown", (event) => {

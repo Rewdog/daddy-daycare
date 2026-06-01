@@ -1960,4 +1960,139 @@ button:disabled {
 
 .parent-affirmation-section h2 { margin: 0; }
 .parent-affirmation-section p  { margin: 0; flex: 1; color: #555; font-size: 0.9rem; }
+
+/* ── Easter Egg Challenge System ──────────────────────────────────────────── */
+.egg-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 900;
+}
+
+.floating-egg {
+  position: absolute;
+  pointer-events: all;
+  font-size: 42px;
+  opacity: 0.18;
+  cursor: pointer;
+  user-select: none;
+  animation: egg-shimmer 3s ease-in-out infinite;
+  transition: opacity 0.3s;
+}
+
+.floating-egg.egg-tv { opacity: 0.28; }
+
+.egg-color-warm { filter: sepia(0.4) hue-rotate(10deg); }
+.egg-color-sage { filter: sepia(0.4) hue-rotate(80deg); }
+.egg-color-sky  { filter: sepia(0.4) hue-rotate(180deg); }
+
+@keyframes egg-shimmer {
+  0%, 100% { opacity: 0.18; transform: scale(1); }
+  50%       { opacity: 0.27; transform: scale(1.07); }
+}
+
+.egg-challenge-card {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  margin: 0.4rem 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.egg-challenge-card.expired {
+  opacity: 0.45;
+  filter: grayscale(0.5);
+}
+
+.egg-challenge-timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  color: #d97706;
+  font-weight: 600;
+}
+
+.egg-multiplier-badge {
+  background: #fde68a;
+  color: #92400e;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-left: 0.3rem;
+}
+
+.egg-pool-status {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0;
+}
+
+.egg-pool-stat {
+  background: #f3f4f6;
+  border-radius: 6px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+.egg-pool-stat.warning {
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 600;
+}
+
+.egg-last-activated {
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin: 0.2rem 0 0.6rem;
+}
+
+.egg-pending-idea {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.55rem 0.75rem;
+  margin: 0.35rem 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.egg-idea-meta {
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin-top: 0.1rem;
+}
+
+.egg-submit-form {
+  background: #f9fafb;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  padding: 0.9rem;
+  margin-top: 0.75rem;
+}
+
+.egg-submit-form input,
+.egg-submit-form textarea {
+  width: 100%;
+  margin: 0.3rem 0;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.88rem;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.egg-section-header {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0.6rem 0 0.2rem;
+  color: #374151;
+}
 .parent-affirmation-section button { width: auto; }
