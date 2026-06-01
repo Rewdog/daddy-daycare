@@ -1148,8 +1148,109 @@ function toggleSchedule() {
   const btn = document.getElementById("schedule-toggle");
   if (!panel) return;
   const open = panel.style.display !== "none";
+  if (!open) {
+    // Close week view if open (mutual exclusion)
+    const weekPanel = document.getElementById("week-panel");
+    const weekBtn = document.getElementById("week-toggle");
+    if (weekPanel) weekPanel.style.display = "none";
+    if (weekBtn) weekBtn.classList.remove("active");
+    renderSchedule();
+  }
   panel.style.display = open ? "none" : "block";
   btn.classList.toggle("active", !open);
+}
+
+function toggleWeekView() {
+  const panel = document.getElementById("week-panel");
+  const btn = document.getElementById("week-toggle");
+  if (!panel) return;
+  const open = panel.style.display !== "none";
+  if (!open) {
+    // Close today's schedule if open (mutual exclusion)
+    const schedPanel = document.getElementById("schedule-panel");
+    const schedBtn = document.getElementById("schedule-toggle");
+    if (schedPanel) schedPanel.style.display = "none";
+    if (schedBtn) schedBtn.classList.remove("active");
+    renderWeekView();
+  }
+  panel.style.display = open ? "none" : "block";
+  btn.classList.toggle("active", !open);
+}
+
+function renderWeekView() {
+  const el = document.getElementById("week-content");
+  if (!el) return;
+
+  const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  const days = [];
+  const today = new Date();
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+    days.push(d);
+  }
+
+  const html = days.map((date, idx) => {
+    const dow = date.getDay();
+    const dayKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+    const isToday = idx === 0;
+    const theme = (window.SCHEDULE_CONFIG?.dayThemes || {})[dow] || null;
+    const blocks = getDailyBlocks(date);
+    const week = getSummerWeek(date);
+
+    const dayLabel = isToday ? "Today" : DAY_NAMES[dow];
+    const dateStr = `${MONTH_NAMES[date.getMonth()]} ${date.getDate()}`;
+
+    const themeColor = theme?.color || "#f0f4f8";
+    const themeEmoji = theme?.emoji || "🛋️";
+    const themeName = theme?.name || "Free Day";
+
+    const summary = getScheduleSummaryForStatuses(appState.scheduleStatuses, dayKey);
+
+    const blocksHtml = blocks.length === 0
+      ? `<p class="week-day-empty">No schedule blocks for this day.</p>`
+      : blocks.map(b => `
+          <div class="week-block">
+            <span class="week-block-time">${escapeHtml(b.time)}</span>
+            <span class="week-block-emoji">${b.emoji}</span>
+            <span class="week-block-label">${escapeHtml(b.label)}</span>
+          </div>
+        `).join("");
+
+    const summaryPills = summary.total > 0
+      ? `<div class="week-day-summary">
+          <span class="schedule-summary-pill schedule-summary-done">✓ ${summary.done}</span>
+          <span class="schedule-summary-pill schedule-summary-progress">⟳ ${summary.inProgress}</span>
+          <span class="schedule-summary-pill schedule-summary-missed">✗ ${summary.notDone}</span>
+          <span class="schedule-summary-pill">${summary.unmarked} unmarked</span>
+        </div>`
+      : "";
+
+    const weekBadge = week
+      ? `<span class="week-day-week-badge">${week.emoji} ${escapeHtml(week.label)}</span>`
+      : "";
+
+    return `
+      <div class="week-day-card${isToday ? " week-day-today" : ""}">
+        <div class="week-day-header" style="background:${themeColor}">
+          <div class="week-day-header-left">
+            <span class="week-day-name">${escapeHtml(dayLabel)}</span>
+            <span class="week-day-date">${escapeHtml(dateStr)}</span>
+            ${weekBadge}
+          </div>
+          <div class="week-day-theme">
+            <span class="week-day-theme-emoji">${themeEmoji}</span>
+            <span class="week-day-theme-name">${escapeHtml(themeName)}</span>
+          </div>
+        </div>
+        ${summaryPills}
+        <div class="week-blocks">${blocksHtml}</div>
+      </div>
+    `;
+  }).join("");
+
+  el.innerHTML = `<div class="week-days">${html}</div>`;
 }
 
 function renderSchedule() {
