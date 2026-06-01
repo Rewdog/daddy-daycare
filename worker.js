@@ -385,7 +385,10 @@ async function handleGetState(request, env, session) {
       last_activated: eggSchedule.last_activated || null,
       enabled: eggSchedule.enabled !== false,
     },
-    ...(isParent ? { egg_challenges_pending: eggChallengesRaw.filter(c => !c.approved) } : {}),
+    ...(isParent ? {
+      egg_challenges_pending: eggChallengesRaw.filter(c => !c.approved),
+      egg_challenges_approved: eggChallengesRaw.filter(c => c.approved),
+    } : {}),
   });
 }
 
