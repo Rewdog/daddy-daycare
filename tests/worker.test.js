@@ -69,6 +69,13 @@ describe("worker.fetch — IP restriction", () => {
     const res = await call("/api/state");
     expect(res.status).not.toBe(403);
   });
+
+  it("returns 403 for a disallowed IP on a static asset path", async () => {
+    const res = await call("/schedule.config.js", {
+      headers: { "CF-Connecting-IP": BLOCKED_IP },
+    });
+    expect(res.status).toBe(403);
+  });
 });
 
 describe("worker.fetch — CORS preflight", () => {
@@ -713,6 +720,24 @@ describe("Easter Egg Challenges — accept", () => {
       env,
     );
     expect(res.status).toBe(404);
+  });
+
+  it("rejects a kid claiming an egg on behalf of a different kid (H1)", async () => {
+    // Child1 is logged in but tries to claim the egg as Child2.
+    // Should be rejected — session role must match kid_role in the request body.
+    const child2Password = "child2-secret";
+    await setupKidAuth("Child2", child2Password, env);
+    const child1Token = withGenericKidSession("Child1", env);
+    const res = await call(
+      "/api/eggs/accept",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${child1Token}` },
+        body: JSON.stringify({ challenge_id: "c1", kid_role: "Child2", password: child2Password }),
+      },
+      env,
+    );
+    expect(res.status).toBe(403);
   });
 });
 
