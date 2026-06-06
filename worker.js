@@ -762,6 +762,7 @@ async function handleEggAccept(request, env, session) {
 
   if (!challengeId || !kidRole || !password) return jsonResponse({ error: "missing_fields" }, 400);
   if (!KID_ROLES.has(kidRole)) return jsonResponse({ error: "invalid_kid_role" }, 400);
+  if (kidRole !== session.role) return jsonResponse({ error: "role_mismatch" }, 403);
 
   // Re-verify kid's password
   const authRaw = await env.DAYCARE_KV.get(authKey(kidRole));
