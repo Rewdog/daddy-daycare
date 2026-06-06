@@ -698,7 +698,7 @@ describe("Easter Egg Challenges — accept", () => {
     await call("/api/eggs/accept", opts, env);
     const second = await call("/api/eggs/accept", { ...opts, body: JSON.stringify(payload) }, env);
     expect(second.status).toBe(409);
-    expect((await second.json()).error).toBe("already_accepted");
+    expect((await second.json()).error).toBe("already_claimed");
   });
 
   it("returns 404 when challenge_id does not exist in active_eggs", async () => {

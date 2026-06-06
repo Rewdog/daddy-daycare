@@ -781,10 +781,10 @@ async function handleEggAccept(request, env, session) {
   if (!egg) return jsonResponse({ error: "egg_not_found" }, 404);
   if (now > egg.display_end + 60000) return jsonResponse({ error: "egg_expired" }, 400);
 
-  // Dedup check
+  // Dedup check — a kid can never claim the same challenge twice (regardless of completion)
   const eggAccepts = await readJsonKey(env, "egg_accepts", []);
-  const existing = eggAccepts.find(a => a.challenge_id === challengeId && a.kid_role === kidRole && !a.completed_at);
-  if (existing) return jsonResponse({ error: "already_accepted" }, 409);
+  const existing = eggAccepts.find(a => a.challenge_id === challengeId && a.kid_role === kidRole);
+  if (existing) return jsonResponse({ error: "already_claimed" }, 409);
 
   const newAccept = {
     id: crypto.randomUUID(),
@@ -800,7 +800,26 @@ async function handleEggAccept(request, env, session) {
     tokens_awarded: 0,
   };
   eggAccepts.push(newAccept);
-  await env.DAYCARE_KV.put("egg_accepts", JSON.stringify(eggAccepts));
+
+  // If all kids have now claimed this challenge, remove it from the pool and active eggs
+  const allKidsClaimed = [...KID_ROLES].every(role =>
+    eggAccepts.some(a => a.challenge_id === challengeId && a.kid_role === role)
+  );
+
+  if (allKidsClaimed) {
+    const [challenges, currentActiveEggs] = await Promise.all([
+      readJsonKey(env, "egg_challenges", []),
+      readJsonKey(env, "active_eggs", []),
+    ]);
+    await Promise.all([
+      env.DAYCARE_KV.put("egg_accepts", JSON.stringify(eggAccepts)),
+      env.DAYCARE_KV.put("egg_challenges", JSON.stringify(challenges.filter(c => c.id !== challengeId))),
+      env.DAYCARE_KV.put("active_eggs", JSON.stringify(currentActiveEggs.filter(e => e.challenge_id !== challengeId))),
+    ]);
+  } else {
+    await env.DAYCARE_KV.put("egg_accepts", JSON.stringify(eggAccepts));
+  }
+
   return jsonResponse({ success: true, challenge_title: egg.challenge_title, token_reward: egg.token_reward, time_limit_minutes: egg.time_limit_minutes });
 }
 

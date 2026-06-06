@@ -3170,7 +3170,7 @@ async function submitEggAccept() {
     const msg = e.message || "";
     err.textContent = msg.includes("401") || msg.includes("wrong_password")
       ? "Wrong password. Try again."
-      : msg.includes("409") ? "Already accepted this challenge!"
+      : msg.includes("409") ? "You've already claimed this challenge!"
       : msg.includes("400") ? "Egg has expired."
       : "Something went wrong. Try again.";
     err.style.display = "block";
