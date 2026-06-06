@@ -1,8 +1,11 @@
 .git
 .github
 .wrangler
+.claude
 node_modules
 ISA.md
 CLAUDE.md
 *.jsonc
+*.pub
 interceptor-screenshot-*.png
+scripts
