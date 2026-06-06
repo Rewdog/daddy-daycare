@@ -180,7 +180,7 @@ Open `wrangler.jsonc` and fill in your family's details. The file has two sectio
     "APP_NAME": "Your App Name",
     "PARENT_ROLES": "[\"Mom\",\"Dad\"]",
     "KID_ROLES": "[\"Alice\",\"Bob\"]",
-    "ALLOWED_IP": ""                     // optional: your home IP to restrict access
+    "ALLOWED_IP": ""                     // optional: your home IP to restrict access (see Security below)
   },
   "kv_namespaces": [
     { "binding": "DAYCARE_KV", "id": "YOUR_PRODUCTION_KV_ID" }
@@ -275,12 +275,30 @@ git push origin main
 
 ---
 
+## Security
+
+### IP restriction
+
+Setting `ALLOWED_IP` in `wrangler.jsonc` restricts the app to a single IP address at the Worker level. The config already sets `run_worker_first: true` so static assets go through the same check — there's no bypass path.
+
+For defense-in-depth, add a Cloudflare WAF rule that enforces the same restriction at the network edge, before the Worker runs:
+
+1. Go to your zone in the [Cloudflare dashboard](https://dash.cloudflare.com) → Security → Security rules → Custom rules → Create rule
+2. Name it something like `home-ip-allowlist`
+3. Set the expression: `(http.host eq "your-app-domain.com" and not ip.src eq YOUR.HOME.IP)`
+4. Action: **Block**
+5. Deploy
+
+Also go to your Worker → Domains tab and verify `workers_dev` is **Inactive** for both Worker URL and Preview URLs. The config sets `workers_dev: false` by default, but if you ever re-enable it the workers.dev URL would bypass any WAF rules tied to your custom domain.
+
+---
+
 ## Branch workflow
 
 | Branch | Environment | URL | Auto-deploys on |
 |--------|-------------|-----|-----------------|
-| `dev` | Staging | `your-app-dev.workers.dev` | push to `dev` |
-| `main` | Production | `your-app.workers.dev` | push to `main` |
+| `dev` | Staging | custom domain (dev worker) | push to `dev` |
+| `main` | Production | custom domain (prod worker) | push to `main` |
 
 **Always work on `dev` first.** Test, then merge `dev` → `main`.
 
